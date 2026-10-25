@@ -4,25 +4,22 @@ A local-first travel budget companion for iPhone. No account, no backend, no tra
 
 Stack: React 18 · TypeScript · Vite 5 · Dexie 4 (IndexedDB) · vite-plugin-pwa (Workbox).
 
-## Run
+## Repo layout
+
+- `app/` is the source (React + TypeScript + Vite + Dexie).
+- The repo root is the built site. Cloudflare Pages serves it straight from `main`, with no build step.
+
+## Run and deploy
 
 ```bash
+cd app
 npm install
-npm run dev        # http://localhost:5173 (add --host to open it from your phone on the same Wi-Fi)
-npm test           # logic tests: voice parsing, CSV detection, matching, budget maths
-npm run build      # typecheck + production build into dist/
-npm run preview    # serve dist/ (service worker active, offline works)
+npm run dev        # local dev server
+npm test           # logic tests
+npm run build      # typecheck + build into app/dist
 ```
 
-## Deploy (GitHub Pages)
-
-The build uses relative paths (`base: './'`) and hash routing, so `dist/` works from any sub-path.
-
-1. Push to a GitHub repo.
-2. Settings → Pages → Source: **GitHub Actions**. The included `.github/workflows/deploy.yml` tests, builds and deploys on every push to `main`.
-3. On iPhone, open the Pages URL in Safari → Share → **Add to Home Screen**.
-
-Service-worker updates apply automatically on the next launch.
+To deploy, replace the root's built files with `app/dist/*` and push to `main`. When a new version is live, the app shows a "New version available" toast with a Refresh button.
 
 ## Privacy and network use
 
@@ -47,7 +44,7 @@ Add another provider by implementing `ExpenseExtractionService` and registering 
 
 ## Testing the full journey
 
-Browser tests (Python Playwright) live in `tests/e2e/`. With `npm run preview` running on port 4173:
+Browser tests (Python Playwright) live in `app/tests/e2e/`. With `npm run preview` running on port 4173:
 
 ```bash
 python3 tests/e2e/1_journey.py                  # create China 2027 → stays → flight → packing → capture → confirm → CSV import
