@@ -31,6 +31,7 @@ export default function More({ section }: { section?: string }) {
       <Row to="/more/data" title="Storage and privacy" sub="What's stored, learned categories, sample data" />
     </div>
     <p className="small muted" style={{ margin: '16px 4px' }}>Your data lives only on this device. No account, no tracking, no ads. Export a backup now and then; deleting the app from your Home Screen deletes its data.</p>
+    <p className="tiny muted" style={{ margin: '0 4px 16px', textAlign: 'center' }}>Version {__APP_VERSION__} · {__APP_BUILT__}</p>
   </>;
 }
 

@@ -19,7 +19,7 @@ npm test           # logic tests
 npm run build      # typecheck + build into app/dist
 ```
 
-To deploy, replace the root's built files with `app/dist/*` and push to `main`. When a new version is live, the app shows a "New version available" toast with a Refresh button.
+To deploy, bump `version` in `app/package.json`, build, replace the root's built files with `app/dist/*` and push to `main`. The version and build time show at the bottom of the More tab. When a new version is live, the app shows a "New version available" toast with a Refresh button.
 
 ## Privacy and network use
 

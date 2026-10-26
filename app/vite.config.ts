@@ -1,6 +1,11 @@
 import { defineConfig } from 'vite';
 import react from '@vitejs/plugin-react';
 import { VitePWA } from 'vite-plugin-pwa';
+import { readFileSync } from 'node:fs';
+
+// Version shown in More: package.json version (bumped each deploy) + build time in Sydney.
+const pkg = JSON.parse(readFileSync(new URL('./package.json', import.meta.url), 'utf8')) as { version: string };
+const built = new Date().toLocaleString('en-AU', { timeZone: 'Australia/Sydney', day: 'numeric', month: 'short', year: 'numeric', hour: 'numeric', minute: '2-digit' });
 
 // base './' keeps the build portable: works at a domain root or a GitHub Pages sub-path.
 // `--mode single` builds a one-file preview without the service worker.
@@ -8,6 +13,7 @@ const pwaStub = { name: 'pwa-stub', resolveId: (id: string) => (id === 'virtual:
 
 export default defineConfig(({ mode }) => ({
   base: './',
+  define: { __APP_VERSION__: JSON.stringify(pkg.version.replace(/\.0$/, '')), __APP_BUILT__: JSON.stringify(built) },
   build: mode === 'single' ? { outDir: 'dist-single', assetsInlineLimit: 100000000, cssCodeSplit: false } : {},
   plugins: mode === 'single' ? [react(), pwaStub] : [
     react(),
