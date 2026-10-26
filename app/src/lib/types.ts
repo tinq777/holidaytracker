@@ -28,6 +28,8 @@ export interface Holiday {
   wentWell?: string;
   improve?: string;
   reviewedLessonIds?: string[];
+  /** Hotel check: places that matter in each city (theme park, station…), added by the user. */
+  keyPlaces?: Record<string, string[]>;
   createdAt: number;
 }
 
@@ -104,6 +106,24 @@ export interface CityIdeas {
   generatedAt: number; source: 'ai' | 'ai-search' | 'demo';
   /** Hotels the eat suggestions were based on (to spot when the booking changes). */
   hotels?: string[];
+}
+
+/** Hotel check: one hotel on the shortlist for a city, with its AI report. */
+export interface HotelCandidate {
+  id: string; holidayId: string; city: string;
+  name: string; link?: string; thumb?: string; // small listing screenshot
+  pricePerNight?: number; currency?: string;
+  status: 'checking' | 'done' | 'failed'; error?: string;
+  report?: HotelReport; chosenStayId?: string; createdAt: number;
+}
+export interface HotelReport {
+  name: string; area?: string; address?: string; stars?: number;
+  verdict: 'good' | 'concerns' | 'red'; summary: string;
+  pricePerNight?: number; currency?: string; valueNote?: string; typicalRange?: string; extras: string[];
+  location: { place: string; time: string; note?: string }[];
+  familyFit?: string; reviewsGood: string[]; reviewsBad: string[]; redFlags: string[];
+  sources: { title: string; url: string }[];
+  source: 'ai-search' | 'ai' | 'demo'; checkedAt: number;
 }
 
 export interface FlightLeg {

@@ -10,7 +10,7 @@ type Section = 'see' | 'events' | 'shop' | 'breakfast' | 'lunch' | 'dinner';
 type HotelRef = { name: string; address?: string; from: string; to: string };
 
 /** Cities to suggest for: the trip's destinations plus any non-layover hotel cities, each with its dates and hotels. */
-function useCities(h: Holiday) {
+export function useCities(h: Holiday) {
   const stays = useLiveQuery(() => db.accommodations.where('holidayId').equals(h.id).toArray(), [h.id], []);
   const norm = (s: string) => s.trim().toLowerCase();
   const names = [...h.destinations];

@@ -1,5 +1,5 @@
 import Dexie, { type Table } from 'dexie';
-import type { CityIdeas, Attachment, Accommodation, ChecklistItem, ChecklistTemplate, Expense, Holiday, Lesson, MerchantRule, PaymentMethod, Rate, Setting, StatementTxn } from './types';
+import type { HotelCandidate, CityIdeas, Attachment, Accommodation, ChecklistItem, ChecklistTemplate, Expense, Holiday, Lesson, MerchantRule, PaymentMethod, Rate, Setting, StatementTxn } from './types';
 import { withCurrentCategories } from './types';
 
 export class HolidayDB extends Dexie {
@@ -16,6 +16,7 @@ export class HolidayDB extends Dexie {
   settings!: Table<Setting, string>;
   attachments!: Table<Attachment, string>;
   ideas!: Table<CityIdeas, string>;
+  hotels!: Table<HotelCandidate, string>;
 
   constructor() {
     super('holiday-tracker');
@@ -38,6 +39,8 @@ export class HolidayDB extends Dexie {
     this.version(3).stores({ attachments: 'id, holidayId, ownerId' });
     // v4: things to do, events and places to eat per city.
     this.version(4).stores({ ideas: 'id, holidayId' });
+    // v5: hotel shortlist and checks.
+    this.version(5).stores({ hotels: 'id, holidayId' });
   }
 }
 
@@ -72,9 +75,10 @@ export async function requestPersistence() {
 }
 
 export async function deleteHoliday(id: string) {
-  await db.transaction('rw', [db.holidays, db.expenses, db.accommodations, db.checklist, db.lessons, db.statementTxns, db.attachments, db.ideas], async () => {
+  await db.transaction('rw', [db.holidays, db.expenses, db.accommodations, db.checklist, db.lessons, db.statementTxns, db.attachments, db.ideas, db.hotels], async () => {
     await db.attachments.where('holidayId').equals(id).delete();
     await db.ideas.where('holidayId').equals(id).delete();
+    await db.hotels.where('holidayId').equals(id).delete();
     await db.expenses.where('holidayId').equals(id).delete();
     await db.accommodations.where('holidayId').equals(id).delete();
     await db.checklist.where('holidayId').equals(id).delete();

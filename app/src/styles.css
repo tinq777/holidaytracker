@@ -270,3 +270,23 @@ table.cmp td { font-family: var(--num); font-variant-numeric: tabular-nums; }
 .update-toast .small { opacity: .8; }
 .update-toast .btn.ghost { color: #fff; }
 .update-toast .btn.primary { background: var(--signal); color: var(--signal-ink); }
+
+/* Hotel check */
+.shot-row { display: flex; align-items: center; gap: 10px; margin: 4px 0; }
+.shot-row img { width: 48px; height: 48px; object-fit: cover; border-radius: 8px; }
+.row.hotel-row { align-items: flex-start; }
+.hotel-row .attach-thumb.icon { font-size: 20px; }
+.hotel-meta { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 10px; font-size: 13px; color: var(--muted); margin-top: 5px; }
+.sub.wrap, .title.wrap { white-space: normal; overflow: visible; text-overflow: clip; }
+.report-head { margin: 4px 4px 12px; }
+.rep-head { font-size: 13px; font-weight: 700; text-transform: uppercase; letter-spacing: .04em; color: var(--muted); margin: 16px 4px 6px; }
+.rep-list { margin: 6px 0 0; padding-left: 18px; }
+.rep-list li { margin: 2px 0; }
+.rep-list.good li::marker { color: var(--good); } .rep-list.badl li::marker { color: var(--bad); }
+table.hotel-cmp td { white-space: normal; min-width: 130px; text-align: left; font-family: var(--font); font-size: 14px; vertical-align: top; }
+table.hotel-cmp th { text-align: left; min-width: 130px; }
+table.hotel-cmp td:first-child { min-width: 96px; }
+.link-btn { background: none; border: 0; padding: 0; color: var(--link); font: inherit; font-weight: 700; text-align: left; cursor: pointer; }
+.seg.scroll { overflow-x: auto; scrollbar-width: none; }
+.seg.scroll::-webkit-scrollbar { display: none; }
+.seg.scroll button { flex: 1 0 auto; padding: 0 12px; white-space: nowrap; }

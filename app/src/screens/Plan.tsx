@@ -17,8 +17,9 @@ import { BookingLines, carLines, defaultLegs, legLines, stayLines } from '../com
 import { deleteAttachmentsFor } from '../lib/attachments';
 import { BookingImport } from '../components/BookingImport';
 import Ideas from './Ideas';
+import HotelCheck from './HotelCheck';
 
-type Seg = 'bookings' | 'ideas' | 'pretrip' | 'packing';
+type Seg = 'bookings' | 'hotels' | 'ideas' | 'pretrip' | 'packing';
 
 export default function Plan({ h }: { h: Holiday }) {
   const [seg, setSeg] = useState<Seg>(() => (sessionStorage.getItem('planSeg') as Seg) || 'bookings');
@@ -28,11 +29,12 @@ export default function Plan({ h }: { h: Holiday }) {
     db.holidays.update(h.id, { reviewedLessonIds: r.includes(id) ? r.filter(x => x !== id) : [...r, id] });
   };
   return <>
-    <div className="seg" style={{ marginBottom: 6 }}>
-      {([['bookings', 'Bookings'], ['ideas', 'Ideas'], ['pretrip', 'Before you go'], ['packing', 'Packing']] as [Seg, string][]).map(([k, l]) => <button key={k} className={seg === k ? 'on' : ''} onClick={() => pick(k)}>{l}</button>)}
+    <div className="seg scroll" style={{ marginBottom: 6 }}>
+      {([['bookings', 'Bookings'], ['hotels', 'Hotel check'], ['ideas', 'Ideas'], ['pretrip', 'Before you go'], ['packing', 'Packing']] as [Seg, string][]).map(([k, l]) => <button key={k} className={seg === k ? 'on' : ''} onClick={() => pick(k)}>{l}</button>)}
     </div>
     {seg === 'bookings' && <Bookings h={h} />}
     {seg === 'ideas' && <Ideas h={h} />}
+    {seg === 'hotels' && <HotelCheck h={h} renderStay={(a, note, done) => <StayEditor h={h} a={a} note={note} onClose={done} />} />}
     {seg === 'pretrip' && <Checklist h={h} list="pretrip" />}
     {seg === 'packing' && <Checklist h={h} list="packing" />}
     <LessonsReminder excludeHolidayId={h.id} reviewed={h.reviewedLessonIds ?? []} onToggle={toggleReviewed} startOpen={false} />

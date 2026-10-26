@@ -2,7 +2,7 @@ import { db } from './db';
 import { withCurrentCategories, type Attachment, type Holiday } from './types';
 import { blobToDataURL, dataURLToBlob } from './attachments';
 
-const TABLES = ['holidays', 'expenses', 'accommodations', 'paymentMethods', 'checklist', 'templates', 'lessons', 'statementTxns', 'rates', 'merchantRules', 'attachments', 'ideas'] as const;
+const TABLES = ['holidays', 'expenses', 'accommodations', 'paymentMethods', 'checklist', 'templates', 'lessons', 'statementTxns', 'rates', 'merchantRules', 'attachments', 'ideas', 'hotels'] as const;
 type TableName = typeof TABLES[number];
 export interface BackupFile { app: 'holiday-tracker'; version: 1; exportedAt: string; data: Record<TableName, unknown[]> }
 
