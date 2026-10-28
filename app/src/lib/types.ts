@@ -119,7 +119,7 @@ export interface TripLeg { id: string; city: string; from: string; to: string }
 /** Hotel check: one hotel on the shortlist for a city, with its AI report. */
 export interface HotelCandidate {
   id: string; holidayId: string; city: string; legId?: string;
-  name: string; link?: string; tripLink?: string; thumb?: string; // small listing screenshot
+  name: string; link?: string; tripLink?: string; agodaLink?: string; thumb?: string; // small listing screenshot
   pricePerNight?: number; currency?: string;
   status: 'checking' | 'done' | 'failed'; error?: string;
   report?: HotelReport; chosenStayId?: string; createdAt: number;
@@ -130,7 +130,7 @@ export interface HotelReport {
   pricePerNight?: number; currency?: string; valueNote?: string; typicalRange?: string; extras: string[];
   location: { place: string; time: string; note?: string }[];
   familyFit?: string; reviewsGood: string[]; reviewsBad: string[]; redFlags: string[]; saveTips?: string[];
-  sources: { title: string; url: string }[]; tripUrl?: string;
+  sources: { title: string; url: string }[]; tripUrl?: string; agodaUrl?: string;
   source: 'ai-search' | 'ai' | 'demo'; checkedAt: number;
 }
 

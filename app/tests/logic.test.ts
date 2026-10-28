@@ -130,4 +130,11 @@ t('Agoda and Google Hotels links', () => {
   assert.equal(a.get('checkIn'), '2027-04-02'); assert.equal(a.get('los'), '6'); assert.equal(a.get('childages'), '8,5'); assert.equal(a.get('adults'), '2');
   assert.equal(new URL(googleHotelsUrl(i)).searchParams.get('q'), 'Ascott Shanghai');
 });
+t('Agoda: share links as-is, hotel pages get the stop dates', () => {
+  const i = { name: 'Shanghai Centre Serviced Apartment', city: 'Shanghai', checkIn: '2027-03-20', checkOut: '2027-04-02', adults: 2, childAges: [8, 5], rooms: 1 };
+  assert.equal(agodaUrl({ ...i, agodaLink: 'https://www.agoda.com/sh-app/pl49NFz0Zdt' }), 'https://www.agoda.com/sh-app/pl49NFz0Zdt');
+  const u = new URL(agodaUrl({ ...i, agodaLink: 'https://www.agoda.com/shanghai-centre-serviced-apartment/hotel/shanghai-cn.html?checkIn=2027-01-01&los=1' }));
+  assert.equal(u.pathname, '/shanghai-centre-serviced-apartment/hotel/shanghai-cn.html');
+  assert.equal(u.searchParams.get('checkIn'), '2027-03-20'); assert.equal(u.searchParams.get('los'), '13'); assert.equal(u.searchParams.get('childAges'), '8,5');
+});
 process.stdout.write(`\n${n} tests passed\n`);
