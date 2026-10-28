@@ -16,10 +16,11 @@ export function useCities(h: Holiday) {
   const norm = (s: string) => s.trim().toLowerCase();
   const names = [...h.destinations];
   for (const a of stays) if (!a.layover && a.city && !names.some(n => norm(n) === norm(a.city))) names.push(a.city);
+  for (const l of h.legs ?? []) if (l.city.trim() && !names.some(n => norm(n) === norm(l.city))) names.push(l.city.trim());
   return names.map(city => {
-    const { from, to, dated, mine } = cityRange(h, stays, city);
-    const hotels: HotelRef[] = mine.filter(a => a.hotel).sort((a, b) => a.checkIn.localeCompare(b.checkIn)).map(a => ({ name: a.hotel, address: a.address, from: a.checkIn, to: a.checkOut }));
-    return { city, from, to, fromStays: dated, hotels };
+    const { from, to, dated, mine, ranges } = cityRange(h, stays, city);
+    const hotels: HotelRef[] = [...new Map(mine.map(a => [a.id, a])).values()].filter(a => a.hotel).sort((a, b) => a.checkIn.localeCompare(b.checkIn)).map(a => ({ name: a.hotel, address: a.address, from: a.checkIn, to: a.checkOut }));
+    return { city, from, to, fromStays: dated, hotels, ranges };
   }).sort((a, b) => a.from.localeCompare(b.from));
 }
 
@@ -35,7 +36,8 @@ export default function Ideas({ h }: { h: Holiday }) {
   </>;
 }
 
-function CityCard({ h, city, from, to, fromStays, hotels, ideas, others }: { h: Holiday; city: string; from: string; to: string; fromStays: boolean; hotels: HotelRef[]; ideas?: CityIdeas; others: string[] }) {
+function CityCard({ h, city, from, to, fromStays, hotels, ranges, ideas, others }: { h: Holiday; city: string; from: string; to: string; fromStays: boolean; hotels: HotelRef[]; ranges: { from: string; to: string }[]; ideas?: CityIdeas; others: string[] }) {
+  const when = ranges.length > 1 ? ranges.map(r => fmtRange(r.from, r.to)).join(' and ') : fmtRange(from, to);
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState('');
   const [open, setOpen] = useState(true);
@@ -45,7 +47,7 @@ function CityCard({ h, city, from, to, fromStays, hotels, ideas, others }: { h: 
   async function run() {
     setErr(''); setBusy(true);
     try {
-      const next = await suggestIdeas({ holidayId: h.id, city, from, to, adults: h.adults, children: h.children, otherCities: others, hotels });
+      const next = await suggestIdeas({ holidayId: h.id, city, from, to, adults: h.adults, children: h.children, otherCities: others, hotels, dates: ranges.length > 1 ? ranges.map(r => `${r.from} to ${r.to}`).join(' and ') : undefined });
       await db.ideas.put(mergeStarred(ideas, next));
       toast(`Ideas for ${city} ready`);
     } catch (e) {
@@ -63,16 +65,16 @@ function CityCard({ h, city, from, to, fromStays, hotels, ideas, others }: { h: 
   return <div className="section city-ideas">
     <div className="section-head">
       <button className="city-title" onClick={() => setOpen(!open)} aria-expanded={open}>
-        <h3>{city}</h3><span className="small muted">{fmtRange(from, to)}{!fromStays && ' (whole trip; set city dates in Edit trip)'}</span>
+        <h3>{city}</h3><span className="small muted">{when}{!fromStays && ' (whole trip; add legs in Edit trip)'}</span>
       </button>
       <button className="btn ghost sm" disabled={busy || !online} onClick={run}>{busy ? 'Thinking…' : ideas ? 'Refresh' : '✨ Suggest'}</button>
     </div>
     {err && <div className="notice warn small">{err}</div>}
-    {!ideas && !busy && <div className="card muted small">Tap ✨ Suggest for things to see and do, what's on {fmtRange(from, to)}, boutique shopping, and breakfast, lunch and dinner spots.{!fromStays && ' Add your hotels to get dates for each city.'}</div>}
+    {!ideas && !busy && <div className="card muted small">Tap ✨ Suggest for things to see and do, what's on {when}, boutique shopping, and breakfast, lunch and dinner spots.{!fromStays && ' Add trip legs in Edit trip to get dates for each city.'}</div>}
     {busy && !ideas && <div className="card muted small">Looking up {city}{h.children ? ' with the kids in mind' : ''}… this can take up to a minute.</div>}
     {ideas && open && <>
       <Group title="See & do" k="see" items={ideas.see} city={city} star={star} remove={remove} />
-      <Group title={`What's on · ${fmtRange(from, to)}`} k="events" items={ideas.events} city={city} star={star} remove={remove}
+      <Group title={`What's on · ${when}`} k="events" items={ideas.events} city={city} star={star} remove={remove}
         empty={ideas.source === 'ai-search' ? 'Nothing special found for these dates.' : 'No events listed.'}
         caption={ideas.source === 'ai' ? 'Web search was unavailable, so these are events that usually happen at this time of year. Check dates before you go.' : 'Check dates and tickets before you go.'} />
       <Group title="Shop" k="shop" items={ideas.shop ?? []} city={city} star={star} remove={remove}

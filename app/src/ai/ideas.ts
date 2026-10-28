@@ -3,7 +3,7 @@ import { cleanText } from './text';
 import { uid } from '../lib/db';
 import type { CityIdeas, IdeaItem } from '../lib/types';
 
-export interface IdeasInput { holidayId: string; city: string; country?: string; from: string; to: string; adults: number; children: number; otherCities: string[]; hotels: { name: string; address?: string; from: string; to: string }[] }
+export interface IdeasInput { holidayId: string; city: string; country?: string; from: string; to: string; adults: number; children: number; otherCities: string[]; dates?: string; hotels: { name: string; address?: string; from: string; to: string }[] }
 export class IdeasUnavailable extends Error {}
 
 type Section = 'see' | 'events' | 'shop' | 'breakfast' | 'lunch' | 'dinner';
@@ -24,11 +24,11 @@ export async function suggestIdeas(i: IdeasInput): Promise<CityIdeas> {
   const prompt = (search: boolean) => `You're a well-travelled local friend. Give high-level suggestions for a family holiday.
 
 City: ${i.city}${i.otherCities.length ? ` (the trip also visits ${i.otherCities.join(', ')})` : ''}
-Dates in this city: ${i.from} to ${i.to}
+Dates in this city: ${i.dates ?? `${i.from} to ${i.to}`}
 Travellers: ${who}${i.children ? '. Favour things that work with children and say when something is NOT suitable for kids.' : ''}
 ${i.hotels.length ? `Staying at: ${i.hotels.map(h => `${h.name}${h.address ? ` (${h.address})` : ''}, ${h.from} to ${h.to}`).join('; ')}` : 'Hotel not booked yet.'}
 
-${search ? `Use web search to find events, festivals, exhibitions, shows or seasonal happenings on during ${i.from} to ${i.to} in ${i.city}. Only include events you found evidence for on those dates.` : `You cannot search the web. For "events", only include recurring annual festivals or seasonal highlights that normally fall in those dates, and set "when" to the usual timing with "(usually)".`}
+${search ? `Use web search to find events, festivals, exhibitions, shows or seasonal happenings on during ${i.dates ?? `${i.from} to ${i.to}`} in ${i.city}. Only include events you found evidence for on those dates.` : `You cannot search the web. For "events", only include recurring annual festivals or seasonal highlights that normally fall in those dates, and set "when" to the usual timing with "(usually)".`}
 
 Return:
 - see: 8 top things to see and do (mix of icons and less obvious picks), each with a one-line reason.

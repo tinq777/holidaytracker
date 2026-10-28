@@ -32,8 +32,10 @@ export interface Holiday {
   keyPlaces?: Record<string, string[]>;
   /** Ages of the children, for family prices on Booking.com / Trip.com links. */
   childAges?: (number | undefined)[];
-  /** Dates in each destination (legs), e.g. Shanghai 20 Mar–2 Apr. Used by Hotels and Ideas. */
+  /** Old per-city dates (v1.8), converted to legs on edit. */
   cityDates?: Record<string, { from: string; to: string }>;
+  /** Trip legs in order, e.g. Shanghai 20 Mar–2 Apr, Beijing 2–15 Apr, Shanghai 15–20 Apr. A city can appear more than once. */
+  legs?: TripLeg[];
   createdAt: number;
 }
 
@@ -112,9 +114,11 @@ export interface CityIdeas {
   hotels?: string[];
 }
 
+export interface TripLeg { id: string; city: string; from: string; to: string }
+
 /** Hotel check: one hotel on the shortlist for a city, with its AI report. */
 export interface HotelCandidate {
-  id: string; holidayId: string; city: string;
+  id: string; holidayId: string; city: string; legId?: string;
   name: string; link?: string; thumb?: string; // small listing screenshot
   pricePerNight?: number; currency?: string;
   status: 'checking' | 'done' | 'failed'; error?: string;

@@ -7,7 +7,7 @@ import { keywordCategory } from '../src/lib/categorise.ts';
 import { round2 } from '../src/lib/money.ts';
 import { cleanText, cleanDeep } from '../src/ai/text.ts';
 import { bookingComUrl, tripComUrl } from '../src/lib/bookingLinks.ts';
-import { splitEvenly, cityRange } from '../src/lib/cityDates.ts';
+import { splitEvenly, cityRange, tripStops } from '../src/lib/cityDates.ts';
 
 let n = 0; const t = (name: string, fn: () => void) => { fn(); n++; process.stdout.write(`✓ ${name}\n`); };
 const ctx = { home: 'AUD', travel: ['CNY'], today: '2027-04-05', paymentMethods: [
@@ -103,11 +103,15 @@ t('booking links carry dates, guests and child ages', () => {
   const t2 = new URL(tripComUrl(i)).searchParams;
   assert.equal(t2.get('checkin'), '2027/04/02'); assert.equal(t2.get('ages'), '8,5'); assert.equal(t2.get('crn'), '2');
 });
-t('city legs: split evenly and take priority over whole trip', () => {
-  const s = splitEvenly('2027-03-20', '2027-04-20', ['Shanghai', 'Beijing']);
-  assert.deepEqual(s, { Shanghai: { from: '2027-03-20', to: '2027-04-05' }, Beijing: { from: '2027-04-05', to: '2027-04-20' } });
-  const h = { id: 'h', name: 'C', destinations: ['Shanghai', 'Beijing'], start: '2027-03-20', end: '2027-04-20', homeCurrency: 'AUD', currencies: [], adults: 2, children: 2, budget: 1, categories: [], categoryBudgets: {}, createdAt: 0, cityDates: s };
-  assert.equal(cityRange(h, [], 'Beijing').from, '2027-04-05'); assert.equal(cityRange(h, [], 'Beijing').dated, true);
-  assert.equal(cityRange({ ...h, cityDates: undefined }, [], 'Beijing').from, '2027-03-20');
+t('trip legs: split evenly, repeat cities, per-leg dates', () => {
+  const legs = splitEvenly('2027-03-20', '2027-04-20', [{ id: 'a', city: 'Shanghai' }, { id: 'b', city: 'Beijing' }, { id: 'c', city: 'Shanghai' }]);
+  assert.deepEqual(legs.map(l => [l.from, l.to]), [['2027-03-20', '2027-03-31'], ['2027-03-31', '2027-04-10'], ['2027-04-10', '2027-04-20']]);
+  const h = { id: 'h', name: 'C', destinations: ['Shanghai', 'Beijing'], start: '2027-03-20', end: '2027-04-20', homeCurrency: 'AUD', currencies: [], adults: 2, children: 2, budget: 1, categories: [], categoryBudgets: {}, createdAt: 0, legs };
+  const stops = tripStops(h, []);
+  assert.equal(stops.length, 3); assert.equal(stops[2].city, 'Shanghai'); assert.equal(stops[2].from, '2027-04-10'); assert.ok(stops[2].label.includes('10 Apr'));
+  const r = cityRange(h, [], 'Shanghai'); assert.equal(r.ranges.length, 2); assert.equal(r.from, '2027-03-20'); assert.equal(r.to, '2027-04-20');
+  // older per-city dates still work
+  const old = { ...h, legs: undefined, cityDates: { Beijing: { from: '2027-04-05', to: '2027-04-20' } } };
+  assert.equal(tripStops(old, [])[0].from, '2027-04-05');
 });
 process.stdout.write(`\n${n} tests passed\n`);

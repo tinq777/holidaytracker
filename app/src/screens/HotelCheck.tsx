@@ -9,8 +9,7 @@ import { checkHotel, HotelCheckUnavailable } from '../ai/hotel';
 import { Field, Sheet, Stepper, useOnline, useUI } from '../components/ui';
 import { getSetting, setSetting } from '../lib/db';
 import { suggestHotels, type SuggestInput, type SuggestResult } from '../ai/hotelSuggest';
-import { useCities } from './Ideas';
-import { cityRange } from '../lib/cityDates';
+import { tripStops, type Stop } from '../lib/cityDates';
 import { BookingButtons } from '../components/BookingButtons';
 import type { LinkInput } from '../lib/bookingLinks';
 
@@ -30,16 +29,17 @@ const VERDICT: Record<HotelReport['verdict'], { label: string; cls: string }> = 
  * compare them side by side, then turn the chosen one into a booking.
  */
 export default function HotelCheck({ h, renderStay }: { h: Holiday; renderStay: (a: Accommodation, note: string, onClose: () => void) => JSX.Element }) {
-  const cities = useCities(h);
+  const staysAll = useLiveQuery(() => db.accommodations.where('holidayId').equals(h.id).toArray(), [h.id], []);
+  const cities = tripStops(h, staysAll);
   const [pick, setPick] = useState<string | null>(null);
-  const city = cities.find(c => c.city === pick) ?? cities[0];
+  const city = cities.find(c => c.id === pick) ?? cities[0];
   const all = useLiveQuery(() => db.hotels.where('holidayId').equals(h.id).sortBy('createdAt'), [h.id], []);
   const [open, setOpen] = useState<HotelCandidate | null>(null);
   const [compare, setCompare] = useState(false);
   const [booking, setBooking] = useState<{ a: Accommodation; cand: HotelCandidate } | null>(null);
   const keyPlacesAll = useKeyPlaces(h, city?.city ?? '');
   if (!city) return <div className="card empty"><b>Add a destination first</b>Edit the trip to add the cities you're visiting.</div>;
-  const list = all.filter(x => x.city === city.city);
+  const list = all.filter(x => belongs(x, city, cities));
   const keyPlaces = keyPlacesAll;
   const done = list.filter(x => x.status === 'done' && x.report);
   const n = countNights(city.from, city.to);
@@ -54,12 +54,12 @@ export default function HotelCheck({ h, renderStay }: { h: Holiday; renderStay: 
   return <>
     <p className="small muted" style={{ margin: '10px 4px 12px' }}>Find the right hotel: get AI suggestions for an area, then check each one against your trip: travel times to the places that matter, value for money, whether it suits {h.children ? 'the family' : 'you'}, what reviewers keep saying, and any red flags.</p>
     {cities.length > 1 && <div className="trip-picker" role="tablist" aria-label="City">{cities.map(c =>
-      <button key={c.city} role="tab" aria-selected={c.city === city.city} className={'chip' + (c.city === city.city ? ' on' : '')} onClick={() => setPick(c.city)}>{c.city}<span className="phase">{all.filter(x => x.city === c.city).length || ''}</span></button>)}</div>}
-    <div className="small muted" style={{ margin: '0 4px 10px' }}>{city.city} · {fmtRange(city.from, city.to)} · {n} night{n === 1 ? '' : 's'}{!city.fromStays && <> (whole trip). <a href={`#/trip/${h.id}/edit`}>Set dates for each city</a></>}</div>
+      <button key={c.id} role="tab" aria-selected={c.id === city.id} className={'chip' + (c.id === city.id ? ' on' : '')} onClick={() => setPick(c.id)}>{c.label}<span className="phase">{all.filter(x => belongs(x, c, cities)).length || ''}</span></button>)}</div>}
+    <div className="small muted" style={{ margin: '0 4px 10px' }}>{city.city} · {fmtRange(city.from, city.to)} · {n} night{n === 1 ? '' : 's'}{!city.dated && <> (whole trip). <a href={`#/trip/${h.id}/edit`}>Add trip legs</a> to set each city's dates.</>}</div>
 
     <KeyPlaces h={h} city={city.city} />
-    <SuggestCard key={city.city} h={h} ctx={{ city: city.city, from: city.from, to: city.to, places: keyPlaces.all }} shortlisted={list.map(x => (x.report?.name || x.name).toLowerCase())} />
-    <CheckForm h={h} city={city.city} from={city.from} to={city.to} />
+    <SuggestCard key={city.id} h={h} ctx={{ city: city.city, legId: city.id, from: city.from, to: city.to, places: keyPlaces.all }} shortlisted={list.map(x => (x.report?.name || x.name).toLowerCase())} />
+    <CheckForm h={h} city={city.city} legId={city.id} from={city.from} to={city.to} />
 
     {list.length > 0 && <div className="section">
       <div className="section-head"><h3>Shortlist</h3>{done.length >= 2 && <button className="btn ghost sm" onClick={() => setCompare(true)}>Compare {done.length}</button>}</div>
@@ -107,10 +107,16 @@ function KeyPlaces({ h, city }: { h: Holiday; city: string }) {
 }
 
 /* ---------- Check a hotel ---------- */
-type CityCtx = { city: string; from: string; to: string; places: string[] };
+type CityCtx = { city: string; legId?: string; from: string; to: string; places: string[] };
+
+/** Which leg a shortlisted hotel belongs to (older ones without a leg go with the first visit to that city). */
+function belongs(x: HotelCandidate, stop: Stop, stops: Stop[]) {
+  if (x.legId && stops.some(s => s.id === x.legId)) return x.legId === stop.id;
+  return x.city.toLowerCase() === stop.city.toLowerCase() && stops.find(s => s.city.toLowerCase() === stop.city.toLowerCase())?.id === stop.id;
+}
 /** Adds a hotel to the shortlist and runs the AI check. Returns a message if AI isn't available. */
 async function startCheck(h: Holiday, ctx: CityCtx, o: { name: string; link?: string; thumb?: string; screenshot?: string; pricePerNight?: number; currency?: string }, toast: (m: string) => void): Promise<string | undefined> {
-  const c: HotelCandidate = { id: uid(), holidayId: h.id, city: ctx.city, name: o.name, link: o.link, thumb: o.thumb, pricePerNight: o.pricePerNight, currency: o.currency, status: 'checking', createdAt: Date.now() };
+  const c: HotelCandidate = { id: uid(), holidayId: h.id, city: ctx.city, legId: ctx.legId, name: o.name, link: o.link, thumb: o.thumb, pricePerNight: o.pricePerNight, currency: o.currency, status: 'checking', createdAt: Date.now() };
   await db.hotels.add(c);
   try {
     const report = await checkHotel({ name: o.name, link: o.link, screenshot: o.screenshot, city: ctx.city, checkIn: ctx.from, checkOut: ctx.to, nights: countNights(ctx.from, ctx.to), adults: h.adults, children: h.children, homeCurrency: h.homeCurrency, places: ctx.places, pricePerNight: o.pricePerNight, currency: o.currency });
@@ -127,7 +133,7 @@ async function startCheck(h: Holiday, ctx: CityCtx, o: { name: string; link?: st
 const MUST_HAVES = ['Family room', 'Breakfast', 'Near metro', 'Pool', 'Kitchen / apartment', 'Free cancellation'];
 
 function SuggestCard({ h, ctx, shortlisted }: { h: Holiday; ctx: CityCtx; shortlisted: string[] }) {
-  const key = `hotelSuggest|${h.id}|${ctx.city}`;
+  const key = `hotelSuggest|${h.id}|${ctx.legId ?? ctx.city}`;
   const saved = useLiveQuery(() => getSetting<SuggestResult | null>(key, null), [key]);
   const [area, setArea] = useState('');
   const [adults, setAdults] = useState(h.adults);
@@ -208,7 +214,7 @@ function SuggestCard({ h, ctx, shortlisted }: { h: Holiday; ctx: CityCtx; shortl
   </div>;
 }
 
-function CheckForm({ h, city, from, to }: { h: Holiday; city: string; from: string; to: string }) {
+function CheckForm({ h, city, legId, from, to }: { h: Holiday; city: string; legId?: string; from: string; to: string }) {
   const { all: places } = useKeyPlaces(h, city);
   const [name, setName] = useState('');
   const [price, setPrice] = useState('');
@@ -234,7 +240,7 @@ function CheckForm({ h, city, from, to }: { h: Holiday; city: string; from: stri
     const per = parseFloat(price) > 0 ? parseFloat(price) : undefined;
     const screenshot = shot?.ai, thumb = shot?.thumb;
     setName(''); setPrice(''); setShot(null);
-    const msg = await startCheck(h, { city, from, to, places }, { name: link ? '' : v, link, thumb, screenshot, pricePerNight: per, currency: per ? cur : undefined }, toast);
+    const msg = await startCheck(h, { city, legId, from, to, places }, { name: link ? '' : v, link, thumb, screenshot, pricePerNight: per, currency: per ? cur : undefined }, toast);
     if (msg) setErr(msg);
   }
 
@@ -282,7 +288,9 @@ function ReportSheet({ h, c, dates, onClose, onBook }: { h: Holiday; c: HotelCan
     await db.hotels.update(c.id, { status: 'checking', error: undefined });
     const city = c.city;
     const stays = await db.accommodations.where('holidayId').equals(h.id).toArray();
-    const { from, to } = cityRange(h, stays, city);
+    const stops = tripStops(h, stays);
+    const stop = stops.find(s => belongs(c, s, stops)) ?? stops.find(s => s.city === city);
+    const from = stop?.from ?? h.start, to = stop?.to ?? h.end;
     const ideas = await db.ideas.get(`${h.id}|${city}`);
     const places = [...new Set([...(h.keyPlaces?.[city] ?? []), ...(ideas ? [...ideas.see, ...ideas.events, ...(ideas.shop ?? [])].filter(x => x.starred).map(x => x.name) : [])])];
     try {

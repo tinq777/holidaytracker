@@ -3,7 +3,8 @@ import { db, uid, deleteHoliday } from '../lib/db';
 import { seedChecklists } from '../lib/checklists';
 import { COMMON_CURRENCIES, fmtMoney } from '../lib/money';
 import { daysBetween, fmtDate } from '../lib/dates';
-import { splitEvenly } from '../lib/cityDates';
+import { splitEvenly, tripLegs } from '../lib/cityDates';
+import type { TripLeg } from '../lib/types';
 import { getSetting, setSetting } from '../lib/db';
 import { estimateBudget, BudgetEstimateUnavailable, type SpendStyle } from '../ai/budget';
 import { refreshRates } from '../lib/rates';
@@ -31,7 +32,7 @@ export default function HolidayForm({ id }: { id?: string }) {
   const [error, setError] = useState('');
   const { confirm, toast } = useUI();
   useEffect(() => { if (existing) {
-    setH(existing); setBudget(existing.budget ? String(existing.budget) : '');
+    setH({ ...existing, legs: tripLegs(existing).map(l => ({ ...l, id: l.id === l.city ? uid() : l.id })), cityDates: undefined }); setBudget(existing.budget ? String(existing.budget) : '');
     const str = (n?: number) => (n ? String(n) : '');
     setFlights(str(existing.categoryBudgets.Flights)); setStays(str(existing.categoryBudgets.Accommodation)); setCar(str(existing.categoryBudgets['Car hire'])); setDaily(str(existing.dailyBudget));
   } }, [existing?.id]); // eslint-disable-line
@@ -73,20 +74,17 @@ export default function HolidayForm({ id }: { id?: string }) {
 
   const set = <K extends keyof Holiday>(k: K, v: Holiday[K]) => setH(p => ({ ...p, [k]: v }));
   const addDest = () => { const d = dest.trim(); if (d && !h.destinations.includes(d)) set('destinations', [...h.destinations, d]); setDest(''); };
-  const removeDest = (d: string) => setH(p => { const cd = { ...(p.cityDates ?? {}) }; delete cd[d]; return { ...p, destinations: p.destinations.filter(x => x !== d), cityDates: cd }; });
-  const setLeg = (city: string, k: 'from' | 'to', v: string) => setH(p => {
-    const cd = { ...(p.cityDates ?? {}) }; const cur = cd[city] ?? { from: '', to: '' };
-    const next = { ...cur, [k]: v };
-    if (k === 'from' && next.to && next.to <= v) next.to = '';
-    cd[city] = next; return { ...p, cityDates: cd };
-  });
+  const removeDest = (d: string) => set('destinations', h.destinations.filter(x => x !== d));
   const addCurrency = (c: string) => { if (c && c !== h.homeCurrency && !h.currencies.includes(c)) set('currencies', [...h.currencies, c]); };
 
   async function save() {
     const d = dest.trim();
     const categoryBudgets = { ...h.categoryBudgets };
     for (const [cat, v] of [['Flights', flights], ['Accommodation', stays], ['Car hire', car]] as const) { const n = numOr(v); if (n) categoryBudgets[cat] = n; else delete categoryBudgets[cat]; }
-    const final: Holiday = { ...h, destinations: d && !h.destinations.includes(d) ? [...h.destinations, d] : h.destinations, budget: numOr(budget) ?? 0, name: h.name.trim(), categoryBudgets, dailyBudget: numOr(daily) || undefined };
+    const legs = (h.legs ?? []).map(l => ({ ...l, city: l.city.trim() })).filter(l => l.city).sort((a, b) => (a.from || '9').localeCompare(b.from || '9'));
+    const dests = [...(d && !h.destinations.includes(d) ? [...h.destinations, d] : h.destinations)];
+    for (const l of legs) if (!dests.some(x => x.toLowerCase() === l.city.toLowerCase())) dests.push(l.city);
+    const final: Holiday = { ...h, legs: legs.length ? legs : undefined, cityDates: undefined, destinations: dests, budget: numOr(budget) ?? 0, name: h.name.trim(), categoryBudgets, dailyBudget: numOr(daily) || undefined };
     if (!final.name) return setError('Give the holiday a name, like "China 2027".');
     if (!final.start || !final.end) return setError('Add the start and end dates.');
     if (final.end < final.start) return setError('The end date is before the start date.');
@@ -117,23 +115,7 @@ export default function HolidayForm({ id }: { id?: string }) {
       <Field label="End"><input className="input" type="date" value={h.end} min={h.start} onChange={e => set('end', e.target.value)} /></Field>
     </div>
     {days !== null && <div className="trip-length"><b>{days}</b> day{days === 1 ? '' : 's'} · <b>{nights}</b> night{nights === 1 ? '' : 's'}</div>}
-    {h.destinations.length > 1 && h.start && h.end && h.end > h.start && <div className="card legs" style={{ marginBottom: 14 }}>
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-        <b>Dates in each city</b>
-        <button type="button" className="btn ghost sm" onClick={() => set('cityDates', splitEvenly(h.start, h.end, h.destinations))}>Split evenly</button>
-      </div>
-      <p className="tiny muted" style={{ margin: '2px 0 8px' }}>Hotel suggestions, Booking.com and Trip.com links and Ideas use these dates for each city.</p>
-      {h.destinations.map(c => { const l = h.cityDates?.[c]; const n = l?.from && l.to && l.to > l.from ? daysBetween(l.from, l.to) : 0;
-        const out = l?.from && (l.from < h.start || (l.to && l.to > h.end));
-        return <div key={c} className="leg-row">
-          <div className="leg-city"><b>{c}</b><span className="tiny muted">{n ? `${n} night${n === 1 ? '' : 's'}` : 'Not set'}</span></div>
-          <div className="inline">
-            <Field label="Arrive"><input className="input" type="date" value={l?.from ?? ''} min={h.start} max={h.end} onChange={e => setLeg(c, 'from', e.target.value)} /></Field>
-            <Field label="Leave"><input className="input" type="date" value={l?.to ?? ''} min={l?.from || h.start} max={h.end} onChange={e => setLeg(c, 'to', e.target.value)} /></Field>
-          </div>
-          {out && <div className="tiny" style={{ color: 'var(--warn)', margin: '-4px 4px 6px' }}>Outside the trip dates ({fmtDate(h.start)} – {fmtDate(h.end)})</div>}
-        </div>; })}
-    </div>}
+    {h.start && h.end && h.end > h.start && <LegsEditor h={h} setH={setH} />}
     <div className="inline">
       <Field label="Adults"><Stepper value={h.adults} min={1} onChange={n => set('adults', n)} /></Field>
       <Field label="Children"><Stepper value={h.children} onChange={n => set('children', n)} /></Field>
@@ -183,4 +165,61 @@ export default function HolidayForm({ id }: { id?: string }) {
     <button className="btn primary block" onClick={save}>{id ? 'Save changes' : 'Create holiday'}</button>
     {id && <><div className="spacer" /><button className="btn danger block" onClick={remove}>Delete holiday</button></>}
   </>;
+}
+
+/** Trip dates at the top, then each leg in order. A city can appear more than once (e.g. fly out from where you started). */
+function LegsEditor({ h, setH }: { h: Holiday; setH: (f: (p: Holiday) => Holiday) => void }) {
+  const legs = h.legs ?? [];
+  const total = daysBetween(h.start, h.end);
+  const setLegs = (l: TripLeg[]) => setH(p => ({ ...p, legs: l }));
+  const up = (i: number, patch: Partial<TripLeg>) => setLegs(legs.map((l, j) => {
+    if (j !== i) return l;
+    const n = { ...l, ...patch };
+    if (patch.from && n.to && n.to <= patch.from) n.to = '';
+    return n;
+  }));
+  const add = () => {
+    const prev = legs[legs.length - 1];
+    const used = legs.map(l => l.city.toLowerCase());
+    const next = h.destinations.find(c => !used.includes(c.toLowerCase())) ?? '';
+    setLegs([...legs, { id: uid(), city: next, from: prev?.to || (legs.length ? '' : h.start), to: '' }]);
+  };
+  const start = () => setLegs((h.destinations.length ? h.destinations : ['']).map(c => ({ id: uid(), city: c, from: '', to: '' })));
+  const split = () => setLegs(splitEvenly(h.start, h.end, legs.length ? legs : h.destinations.map(c => ({ id: uid(), city: c, from: '', to: '' }))));
+  const planned = legs.reduce((t, l) => t + (l.from && l.to && l.to > l.from ? daysBetween(l.from, l.to) : 0), 0);
+  const sorted = [...legs].filter(l => l.from && l.to).sort((a, b) => a.from.localeCompare(b.from));
+  const overlap = sorted.some((l, i) => i > 0 && l.from < sorted[i - 1].to);
+
+  return <div className="card legs" style={{ marginBottom: 14 }}>
+    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 8 }}>
+      <b>Trip legs</b>
+      {legs.length > 0 && <button type="button" className="btn ghost sm" onClick={split}>Split evenly</button>}
+    </div>
+    <div className="legs-total">Whole trip · <b>{fmtDate(h.start, { day: 'numeric', month: 'short' })} – {fmtDate(h.end, { day: 'numeric', month: 'short', year: 'numeric' })}</b> · {total + 1} days, {total} nights</div>
+    {!legs.length && <>
+      <p className="small muted" style={{ margin: '6px 0 10px' }}>Visiting more than one place? Add a leg for each stop so hotels, Booking.com and Trip.com links and Ideas use the right dates. The same city can appear twice.</p>
+      <button type="button" className="btn block" onClick={start}>+ Add legs</button>
+    </>}
+    {legs.map((l, i) => { const n = l.from && l.to && l.to > l.from ? daysBetween(l.from, l.to) : 0;
+      const out = n > 0 && (l.from < h.start || l.to > h.end);
+      return <div key={l.id} className="leg-row">
+        <div className="leg-city">
+          <span className="leg-no">Leg {i + 1}</span>
+          <input className="input" list="leg-cities" value={l.city} placeholder="City" aria-label={`City for leg ${i + 1}`} onChange={e => up(i, { city: e.target.value })} />
+          <button type="button" className="btn ghost sm" aria-label={`Remove leg ${i + 1}`} onClick={() => setLegs(legs.filter((_, j) => j !== i))}>Remove</button>
+        </div>
+        <div className="inline">
+          <Field label="Arrive"><input className="input" type="date" value={l.from} onChange={e => up(i, { from: e.target.value })} /></Field>
+          <Field label="Leave"><input className="input" type="date" value={l.to} min={l.from || undefined} onChange={e => up(i, { to: e.target.value })} /></Field>
+        </div>
+        <div className="tiny leg-nights" style={{ color: out ? 'var(--warn)' : undefined }}>{n ? `${n} night${n === 1 ? '' : 's'}` : 'Set arrive and leave dates'}{out && ' · outside the trip dates above'}</div>
+      </div>; })}
+    {legs.length > 0 && <>
+      <button type="button" className="btn block" style={{ marginTop: 8 }} onClick={add}>+ Add leg</button>
+      <div className={'tiny legs-sum' + (planned !== total || overlap ? ' warn' : '')}>
+        {overlap ? 'Some legs overlap. Check the dates.' : planned === total ? `All ${total} nights planned.` : `${planned} of ${total} nights planned.`}
+      </div>
+    </>}
+    <datalist id="leg-cities">{h.destinations.map(c => <option key={c} value={c} />)}</datalist>
+  </div>;
 }

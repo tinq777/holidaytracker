@@ -301,3 +301,11 @@ table.hotel-cmp td:first-child { min-width: 96px; }
 .btn.site-btn.trip { background: #287DFA; color: #fff; }
 .legs .leg-row + .leg-row { border-top: 1px solid var(--line); padding-top: 10px; margin-top: 2px; }
 .leg-city { display: flex; justify-content: space-between; align-items: baseline; margin: 0 4px 6px; }
+.legs-total { font-size: 14px; color: var(--muted); margin: 4px 0 8px; }
+.legs-total b { color: var(--ink); font-weight: 600; }
+.leg-city { display: flex; align-items: center; gap: 8px; margin: 0 0 6px; }
+.leg-city .input { flex: 1; font-weight: 650; }
+.leg-no { font-size: 13px; font-weight: 700; color: var(--muted); white-space: nowrap; }
+.leg-nights { margin: -6px 4px 8px; color: var(--muted); }
+.legs-sum { margin: 8px 4px 0; color: var(--good); }
+.legs-sum.warn { color: var(--warn); }
