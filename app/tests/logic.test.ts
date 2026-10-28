@@ -6,7 +6,7 @@ import { tripStats, dailySummaries } from '../src/lib/calc.ts';
 import { keywordCategory } from '../src/lib/categorise.ts';
 import { round2 } from '../src/lib/money.ts';
 import { cleanText, cleanDeep } from '../src/ai/text.ts';
-import { bookingComUrl, tripComUrl, parseTripLink } from '../src/lib/bookingLinks.ts';
+import { bookingComUrl, tripComUrl, parseTripLink, agodaUrl, googleHotelsUrl } from '../src/lib/bookingLinks.ts';
 import { splitEvenly, cityRange, tripStops } from '../src/lib/cityDates.ts';
 
 let n = 0; const t = (name: string, fn: () => void) => { fn(); n++; process.stdout.write(`✓ ${name}\n`); };
@@ -123,5 +123,11 @@ t('Trip.com app links use the share-link format when the hotel id is known', () 
   assert.equal(u.host + u.pathname, 'au.trip.com/hotels/w/detail/'); assert.equal(u.searchParams.get('hotelid'), '123245486');
   assert.equal(u.searchParams.get('cityid'), '2'); assert.equal(u.searchParams.get('checkin'), '2027-03-20');
   assert.equal(tripComUrl({ ...i, tripLink: 'https://www.trip.com/w/DAzAFeY4wW2' }), 'https://www.trip.com/w/DAzAFeY4wW2');
+});
+t('Agoda and Google Hotels links', () => {
+  const i = { name: 'Ascott', city: 'Shanghai', checkIn: '2027-04-02', checkOut: '2027-04-08', adults: 2, childAges: [8, 5], rooms: 1 };
+  const a = new URL(agodaUrl(i)).searchParams;
+  assert.equal(a.get('checkIn'), '2027-04-02'); assert.equal(a.get('los'), '6'); assert.equal(a.get('childages'), '8,5'); assert.equal(a.get('adults'), '2');
+  assert.ok(new URL(googleHotelsUrl(i)).searchParams.get('q')!.includes('2027-04-02 to 2027-04-08'));
 });
 process.stdout.write(`\n${n} tests passed\n`);

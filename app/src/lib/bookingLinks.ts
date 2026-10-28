@@ -45,6 +45,22 @@ export function tripComUrl(i: LinkInput) {
   return `https://www.trip.com/hotels/list?${p}`;
 }
 
+/** Agoda: search for the hotel with dates, guests, children's ages and rooms. */
+export function agodaUrl(i: LinkInput) {
+  const los = Math.max(1, Math.round((Date.parse(i.checkOut) - Date.parse(i.checkIn)) / 86400000));
+  const p = new URLSearchParams({ textToSearch: `${i.name}, ${i.city}`, checkIn: i.checkIn, checkOut: i.checkOut, los: String(los), rooms: String(i.rooms), adults: String(i.adults), children: String(i.childAges.length) });
+  const ages = i.childAges.filter((a): a is number => a !== undefined);
+  if (ages.length) p.set('childages', ages.join(','));
+  if (i.currency) p.set('currency', i.currency);
+  return `https://www.agoda.com/search?${p}`;
+}
+
+/** Google Hotels: compares this hotel's price across many sites, often including the hotel's own website. */
+export function googleHotelsUrl(i: LinkInput) {
+  const people = i.adults + i.childAges.length;
+  return `https://www.google.com/travel/search?${new URLSearchParams({ q: `${i.name} ${i.city} ${i.checkIn} to ${i.checkOut} ${people} guests` })}`;
+}
+
 export const opensTripApp = (i: LinkInput) => { const t = parseTripLink(i.tripLink); return !!(t.hotelId || t.short); };
 
 /** Copies the hotel name so it can be pasted if a site opens on a general search page. */

@@ -204,7 +204,7 @@ function SuggestCard({ h, ctx, shortlisted }: { h: Holiday; ctx: CityCtx; shortl
               <button className="btn sm primary" disabled={added || !online} onClick={async () => { const m = await startCheck(h, ctx, { name: x.name, link: x.link, tripLink: x.tripUrl, pricePerNight: x.pricePerNight, currency: x.currency }, toast); if (m) setErr(m); }}>{added ? 'On shortlist' : 'Check & shortlist'}</button>
               <a className="btn sm" href={`https://maps.apple.com/?q=${encodeURIComponent(`${x.name}, ${ctx.city}`)}`} target="_blank" rel="noopener">Map</a>
             </div>
-            <div className="inline site-row"><BookingButtons small link={linkFor(h, x.name, ctx.city, ctx.from, ctx.to, saved.input.adults, saved.input.children, saved.input.rooms === 'best' ? undefined : Number(saved.input.rooms), x.tripUrl)} /></div>
+            <div className="site-row"><BookingButtons small link={linkFor(h, x.name, ctx.city, ctx.from, ctx.to, saved.input.adults, saved.input.children, saved.input.rooms === 'best' ? undefined : Number(saved.input.rooms), x.tripUrl)} /></div>
           </div>
         </div>;
       })}</div>
@@ -348,10 +348,10 @@ function ReportSheet({ h, c, dates, onClose, onBook }: { h: Holiday; c: HotelCan
     </>}
     <div className="rep-head">Your price</div>
     {(() => { const L = linkFor(h, r?.name || c.name, c.city, dates[0], dates[1], undefined, undefined, undefined, c.tripLink ?? r?.tripUrl); return <>
-      <div className="inline site-row" style={{ marginBottom: 6 }}><BookingButtons link={L} /></div>
+      <div className="site-row" style={{ marginBottom: 6 }}><BookingButtons link={L} /></div>
       {!opensTripApp(L) && <TripLinkField c={c} />}
     </>; })()}
-    <p className="tiny muted" style={{ margin: '0 4px 10px' }}>Opens with your dates and guests filled in. Log in there to see your member price (Genius, Trip.com member rates).{h.children > 0 && (h.childAges ?? []).filter(a => a !== undefined).length < h.children ? ' Add the children\'s ages in Edit trip for accurate family prices.' : ''}</p>
+    <p className="tiny muted" style={{ margin: '0 4px 10px' }}>Opens with your dates and guests filled in. Log in to see member prices (Genius, Trip.com, Agoda VIP). Compare prices shows this hotel across many sites, often including its own website. Check prices include taxes and are for the same room and terms.{h.children > 0 && (h.childAges ?? []).filter(a => a !== undefined).length < h.children ? ' Add the children\'s ages in Edit trip for accurate family prices.' : ''}</p>
     {c.link && <a className="btn block" href={c.link} target="_blank" rel="noopener" style={{ marginBottom: 8 }}>Open listing</a>}
     <a className="btn block" href={`https://maps.apple.com/?q=${encodeURIComponent(`${r?.name || c.name}, ${c.city}`)}`} target="_blank" rel="noopener">Show on map</a>
     {r && !c.chosenStayId && <button className="btn primary block" style={{ marginTop: 8 }} onClick={() => onBook(c)}>Book this one</button>}
