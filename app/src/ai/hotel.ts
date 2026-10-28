@@ -40,10 +40,11 @@ Assess:
 - reviewsGood / reviewsBad: recurring themes across reviews (not one-offs), each under 12 words.
 - redFlags: anything that should stop them booking or that they must check first, e.g. noise from bars or roads, construction or renovation, smoking smell, misleading photos, hidden fees, poor cleanliness, safety, location far from transport, and local traps such as a mainland China hotel not licensed to accept foreign passport holders. Empty list if none.
 - saveTips: 1-3 specific ways to pay less for THIS hotel (loyalty member rate or perks booking direct, long-stay or advance-purchase rates, free cancellation to rebook if the price drops, a cheaper room type that still fits everyone, paying in local currency rather than home currency at the desk). Only tips that genuinely apply.
+- tripUrl: this hotel's page on trip.com if you found it (the URL contains the hotel id), else empty.
 - verdict: "good" (recommend), "concerns" (ok with caveats) or "red" (avoid or verify first). summary: two sentences max, plain English.
 
 Respond with ONLY JSON in plain text (no citation tags, no HTML), no markdown:
-{"name":"","area":"","address":"","stars":0,"verdict":"good","summary":"","pricePerNight":0,"currency":"","typicalRange":"","valueNote":"","extras":[""],"location":[{"place":"","time":"","note":""}],"familyFit":"","reviewsGood":[""],"reviewsBad":[""],"redFlags":[""],"saveTips":[""],"sources":[{"title":"","url":""}]}`;
+{"name":"","area":"","address":"","stars":0,"verdict":"good","summary":"","pricePerNight":0,"currency":"","typicalRange":"","valueNote":"","extras":[""],"location":[{"place":"","time":"","note":""}],"familyFit":"","reviewsGood":[""],"reviewsBad":[""],"redFlags":[""],"saveTips":[""],"tripUrl":"","sources":[{"title":"","url":""}]}`;
 
   const call = async (search: boolean) => {
     const content: unknown[] = [];
@@ -84,6 +85,7 @@ function normalise(p: Record<string, unknown>, i: HotelCheckInput, source: Hotel
     location: (Array.isArray(p.location) ? p.location : []).filter(x => x && str(x.place) && str(x.time)).slice(0, 8).map(x => ({ place: str(x.place)!, time: str(x.time)!, note: str(x.note) })),
     familyFit: str(p.familyFit), reviewsGood: list(p.reviewsGood), reviewsBad: list(p.reviewsBad), redFlags: list(p.redFlags), saveTips: list(p.saveTips, 3),
     sources: (Array.isArray(p.sources) ? p.sources : []).filter(x => x && typeof x.url === 'string' && /^https?:\/\//.test(x.url)).slice(0, 6).map(x => ({ title: str(x.title) ?? new URL(x.url).hostname, url: x.url })),
+    tripUrl: typeof p.tripUrl === 'string' && /trip\.com/.test(p.tripUrl) ? p.tripUrl : (Array.isArray(p.sources) ? p.sources : []).map(x => x?.url).find(u => typeof u === 'string' && /trip\.com\/hotels\/.*(detail|hotelid)/i.test(u)),
     source, checkedAt: Date.now()
   };
 }

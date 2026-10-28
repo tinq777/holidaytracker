@@ -6,7 +6,7 @@ import { tripStats, dailySummaries } from '../src/lib/calc.ts';
 import { keywordCategory } from '../src/lib/categorise.ts';
 import { round2 } from '../src/lib/money.ts';
 import { cleanText, cleanDeep } from '../src/ai/text.ts';
-import { bookingComUrl, tripComUrl } from '../src/lib/bookingLinks.ts';
+import { bookingComUrl, tripComUrl, parseTripLink } from '../src/lib/bookingLinks.ts';
 import { splitEvenly, cityRange, tripStops } from '../src/lib/cityDates.ts';
 
 let n = 0; const t = (name: string, fn: () => void) => { fn(); n++; process.stdout.write(`✓ ${name}\n`); };
@@ -113,5 +113,15 @@ t('trip legs: split evenly, repeat cities, per-leg dates', () => {
   // older per-city dates still work
   const old = { ...h, legs: undefined, cityDates: { Beijing: { from: '2027-04-05', to: '2027-04-20' } } };
   assert.equal(tripStops(old, [])[0].from, '2027-04-05');
+});
+t('Trip.com app links use the share-link format when the hotel id is known', () => {
+  const share = 'https://au.trip.com/hotels/w/detail/?checkin=2027-04-06&checkout=2027-04-17&cityid=2&curr=AUD&fromShare=TripAppDetail&hotelid=123245486&locale=en-AU';
+  assert.deepEqual(parseTripLink(share), { hotelId: '123245486', cityId: '2', short: undefined });
+  assert.equal(parseTripLink('https://www.trip.com/hotels/shanghai-hotel-detail-123245486/ascott/').hotelId, '123245486');
+  const i = { name: 'Ascott', city: 'Shanghai', checkIn: '2027-03-20', checkOut: '2027-04-02', adults: 2, childAges: [8, 5], rooms: 1, tripLink: 'https://www.trip.com/hotels/shanghai-hotel-detail-123245486/' };
+  const u = new URL(tripComUrl(i));
+  assert.equal(u.host + u.pathname, 'au.trip.com/hotels/w/detail/'); assert.equal(u.searchParams.get('hotelid'), '123245486');
+  assert.equal(u.searchParams.get('cityid'), '2'); assert.equal(u.searchParams.get('checkin'), '2027-03-20');
+  assert.equal(tripComUrl({ ...i, tripLink: 'https://www.trip.com/w/DAzAFeY4wW2' }), 'https://www.trip.com/w/DAzAFeY4wW2');
 });
 process.stdout.write(`\n${n} tests passed\n`);

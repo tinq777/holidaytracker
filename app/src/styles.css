@@ -309,3 +309,4 @@ table.hotel-cmp td:first-child { min-width: 96px; }
 .leg-nights { margin: -6px 4px 8px; color: var(--muted); }
 .legs-sum { margin: 8px 4px 0; color: var(--good); }
 .legs-sum.warn { color: var(--warn); }
+.trip-link-field { margin: 0 4px 12px; }

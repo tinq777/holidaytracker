@@ -11,7 +11,7 @@ export interface SuggestInput {
 export interface HotelSuggestion {
   name: string; area?: string; why: string; roomSetup?: string;
   pricePerNight?: number; currency?: string; priceNote?: string;
-  near: string[]; pros: string[]; saveTips: string[]; watchOut?: string; foreignGuests?: 'yes' | 'no' | 'unknown'; link?: string;
+  near: string[]; pros: string[]; saveTips: string[]; watchOut?: string; foreignGuests?: 'yes' | 'no' | 'unknown'; link?: string; tripUrl?: string;
 }
 export interface SuggestResult { areaTip?: string; hotels: HotelSuggestion[]; source: 'ai-search' | 'ai' | 'demo'; at: number; input: SuggestInput }
 
@@ -44,8 +44,9 @@ pricePerNight is the TOTAL for the whole group per night (all rooms) in ${i.curr
 areaTip: one or two sentences on whether the preferred area is a good base for this trip, and a better alternative if there is one.
 
 Respond with ONLY JSON in plain text (no citation tags, no HTML), no markdown:
-{"areaTip":"","hotels":[{"name":"","area":"","why":"","roomSetup":"","pricePerNight":0,"currency":"${i.currency}","priceNote":"","near":["12 min walk to …"],"pros":[""],"saveTips":[""],"watchOut":"","foreignGuests":"yes","link":""}]}
+{"areaTip":"","hotels":[{"name":"","area":"","why":"","roomSetup":"","pricePerNight":0,"currency":"${i.currency}","priceNote":"","near":["12 min walk to …"],"pros":[""],"saveTips":[""],"watchOut":"","foreignGuests":"yes","link":"","tripUrl":""}]}
 saveTips: 1-2 specific ways to pay less for THIS hotel, e.g. the chain's loyalty member rate or perks when booking direct, long-stay or advance-purchase discounts, free cancellation to rebook if the price drops, a cheaper room type that still fits everyone, pay in local currency rather than ${i.currency === 'AUD' ? 'AUD' : 'your home currency'} at the desk. Only include tips that genuinely apply; no generic advice.
+tripUrl: the hotel's trip.com page if you found it (the URL contains the hotel id), else empty.
 Keep "why" under 20 words, at most 3 pros and 2 "near" items.`;
 
   const call = async (search: boolean) => {
@@ -79,7 +80,8 @@ function normalise(p: Record<string, unknown>, i: SuggestInput, source: SuggestR
     pricePerNight: num(x.pricePerNight), currency: str(x.currency)?.toUpperCase() ?? i.currency, priceNote: str(x.priceNote),
     near: list(x.near, 2), pros: list(x.pros, 3), saveTips: list(x.saveTips, 2), watchOut: str(x.watchOut),
     foreignGuests: x.foreignGuests === 'yes' || x.foreignGuests === 'no' ? x.foreignGuests : 'unknown',
-    link: typeof x.link === 'string' && /^https?:\/\//.test(x.link) ? x.link : undefined
+    link: typeof x.link === 'string' && /^https?:\/\//.test(x.link) ? x.link : undefined,
+    tripUrl: typeof x.tripUrl === 'string' && /trip\.com/.test(x.tripUrl) ? x.tripUrl : typeof x.link === 'string' && /trip\.com/.test(x.link) ? x.link : undefined
   }));
   return { areaTip: str(p.areaTip), hotels, source, at: Date.now(), input: i };
 }

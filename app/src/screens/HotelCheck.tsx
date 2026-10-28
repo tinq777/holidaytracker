@@ -11,10 +11,10 @@ import { getSetting, setSetting } from '../lib/db';
 import { suggestHotels, type SuggestInput, type SuggestResult } from '../ai/hotelSuggest';
 import { tripStops, type Stop } from '../lib/cityDates';
 import { BookingButtons } from '../components/BookingButtons';
-import type { LinkInput } from '../lib/bookingLinks';
+import { opensTripApp, parseTripLink, type LinkInput } from '../lib/bookingLinks';
 
-const linkFor = (h: Holiday, name: string, city: string, from: string, to: string, adults = h.adults, children = h.children, rooms?: number): LinkInput => ({
-  name, city, checkIn: from, checkOut: to, adults,
+const linkFor = (h: Holiday, name: string, city: string, from: string, to: string, adults = h.adults, children = h.children, rooms?: number, tripLink?: string): LinkInput => ({
+  name, city, checkIn: from, checkOut: to, adults, tripLink,
   childAges: Array.from({ length: children }, (_, i) => h.childAges?.[i]),
   rooms: rooms ?? (adults + children > 4 ? 2 : 1)
 });
@@ -115,8 +115,8 @@ function belongs(x: HotelCandidate, stop: Stop, stops: Stop[]) {
   return x.city.toLowerCase() === stop.city.toLowerCase() && stops.find(s => s.city.toLowerCase() === stop.city.toLowerCase())?.id === stop.id;
 }
 /** Adds a hotel to the shortlist and runs the AI check. Returns a message if AI isn't available. */
-async function startCheck(h: Holiday, ctx: CityCtx, o: { name: string; link?: string; thumb?: string; screenshot?: string; pricePerNight?: number; currency?: string }, toast: (m: string) => void): Promise<string | undefined> {
-  const c: HotelCandidate = { id: uid(), holidayId: h.id, city: ctx.city, legId: ctx.legId, name: o.name, link: o.link, thumb: o.thumb, pricePerNight: o.pricePerNight, currency: o.currency, status: 'checking', createdAt: Date.now() };
+async function startCheck(h: Holiday, ctx: CityCtx, o: { name: string; link?: string; tripLink?: string; thumb?: string; screenshot?: string; pricePerNight?: number; currency?: string }, toast: (m: string) => void): Promise<string | undefined> {
+  const c: HotelCandidate = { id: uid(), holidayId: h.id, city: ctx.city, legId: ctx.legId, name: o.name, link: o.link, tripLink: o.tripLink ?? (o.link && /trip\.com/i.test(o.link) ? o.link : undefined), thumb: o.thumb, pricePerNight: o.pricePerNight, currency: o.currency, status: 'checking', createdAt: Date.now() };
   await db.hotels.add(c);
   try {
     const report = await checkHotel({ name: o.name, link: o.link, screenshot: o.screenshot, city: ctx.city, checkIn: ctx.from, checkOut: ctx.to, nights: countNights(ctx.from, ctx.to), adults: h.adults, children: h.children, homeCurrency: h.homeCurrency, places: ctx.places, pricePerNight: o.pricePerNight, currency: o.currency });
@@ -201,10 +201,10 @@ function SuggestCard({ h, ctx, shortlisted }: { h: Holiday; ctx: CityCtx; shortl
             {x.saveTips?.length > 0 && <div className="sub wrap save-tip">💡 {x.saveTips.join(' · ')}</div>}
             {x.watchOut && <div className="sub wrap" style={{ color: 'var(--warn)' }}>Watch out: {x.watchOut}</div>}
             <div className="inline" style={{ marginTop: 8 }}>
-              <button className="btn sm primary" disabled={added || !online} onClick={async () => { const m = await startCheck(h, ctx, { name: x.name, link: x.link, pricePerNight: x.pricePerNight, currency: x.currency }, toast); if (m) setErr(m); }}>{added ? 'On shortlist' : 'Check & shortlist'}</button>
+              <button className="btn sm primary" disabled={added || !online} onClick={async () => { const m = await startCheck(h, ctx, { name: x.name, link: x.link, tripLink: x.tripUrl, pricePerNight: x.pricePerNight, currency: x.currency }, toast); if (m) setErr(m); }}>{added ? 'On shortlist' : 'Check & shortlist'}</button>
               <a className="btn sm" href={`https://maps.apple.com/?q=${encodeURIComponent(`${x.name}, ${ctx.city}`)}`} target="_blank" rel="noopener">Map</a>
             </div>
-            <div className="inline site-row"><BookingButtons small link={linkFor(h, x.name, ctx.city, ctx.from, ctx.to, saved.input.adults, saved.input.children, saved.input.rooms === 'best' ? undefined : Number(saved.input.rooms))} /></div>
+            <div className="inline site-row"><BookingButtons small link={linkFor(h, x.name, ctx.city, ctx.from, ctx.to, saved.input.adults, saved.input.children, saved.input.rooms === 'best' ? undefined : Number(saved.input.rooms), x.tripUrl)} /></div>
           </div>
         </div>;
       })}</div>
@@ -281,6 +281,24 @@ function CandidateRow({ c, onOpen }: { c: HotelCandidate; onOpen: () => void }) 
   </button>;
 }
 
+/** Paste a Trip.com share link once so the Trip.com button opens this hotel in the app. */
+function TripLinkField({ c }: { c: HotelCandidate }) {
+  const [v, setV] = useState('');
+  const { toast } = useUI();
+  const save = async () => {
+    const t = v.trim(); const p = parseTripLink(t);
+    if (!p.hotelId && !p.short) return toast("That doesn't look like a Trip.com hotel link");
+    await db.hotels.update(c.id, { tripLink: t }); setV(''); toast('Trip.com button now opens the app');
+  };
+  return <div className="trip-link-field">
+    <div className="tiny muted">Trip.com button opens the website. To open the app instead: in the Trip.com app, open this hotel, tap Share → Copy link, and paste it here.</div>
+    <div className="inline" style={{ marginTop: 6 }}>
+      <input className="input" value={v} placeholder="https://www.trip.com/w/…" onChange={e => setV(e.target.value)} />
+      <button className="btn" style={{ flex: '0 0 auto' }} onClick={save}>Save</button>
+    </div>
+  </div>;
+}
+
 function ReportSheet({ h, c, dates, onClose, onBook }: { h: Holiday; c: HotelCandidate; dates: [string, string]; onClose: () => void; onBook: (c: HotelCandidate) => void }) {
   const { confirm } = useUI();
   const r = c.report;
@@ -329,7 +347,10 @@ function ReportSheet({ h, c, dates, onClose, onBook }: { h: Holiday; c: HotelCan
       <p className="tiny muted" style={{ margin: '10px 4px' }}>{r.source === 'demo' ? 'Demo report, not a real hotel. Choose Claude in More → AI reading for real checks.' : `${r.source === 'ai' ? 'Web search was unavailable, so this is from Claude\'s own knowledge. ' : ''}Checked ${new Date(r.checkedAt).toLocaleDateString('en-AU', { day: 'numeric', month: 'short' })}. Travel times are estimates; confirm anything important before booking.`}</p>
     </>}
     <div className="rep-head">Your price</div>
-    <div className="inline site-row" style={{ marginBottom: 6 }}><BookingButtons link={linkFor(h, r?.name || c.name, c.city, dates[0], dates[1])} /></div>
+    {(() => { const L = linkFor(h, r?.name || c.name, c.city, dates[0], dates[1], undefined, undefined, undefined, c.tripLink ?? r?.tripUrl); return <>
+      <div className="inline site-row" style={{ marginBottom: 6 }}><BookingButtons link={L} /></div>
+      {!opensTripApp(L) && <TripLinkField c={c} />}
+    </>; })()}
     <p className="tiny muted" style={{ margin: '0 4px 10px' }}>Opens with your dates and guests filled in. Log in there to see your member price (Genius, Trip.com member rates).{h.children > 0 && (h.childAges ?? []).filter(a => a !== undefined).length < h.children ? ' Add the children\'s ages in Edit trip for accurate family prices.' : ''}</p>
     {c.link && <a className="btn block" href={c.link} target="_blank" rel="noopener" style={{ marginBottom: 8 }}>Open listing</a>}
     <a className="btn block" href={`https://maps.apple.com/?q=${encodeURIComponent(`${r?.name || c.name}, ${c.city}`)}`} target="_blank" rel="noopener">Show on map</a>
