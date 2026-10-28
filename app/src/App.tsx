@@ -15,6 +15,15 @@ import Compare from './screens/Compare';
 import { UpdateToast } from './components/UpdateToast';
 import { AllExpenses, Checklists } from './screens/Hub';
 import CaptureSheet from './screens/CaptureSheet';
+import { cleanDeep } from './ai/text';
+
+/** Strips citation tags from AI results saved before v1.6. Cheap and safe to run on every launch. */
+async function cleanSavedAI() {
+  const tag = /<\/?cite|<\w+[^>]*>/;
+  for (const x of await db.hotels.toArray()) if (x.report && tag.test(JSON.stringify(x.report))) await db.hotels.update(x.id, { report: cleanDeep(x.report), name: cleanDeep(x.name) });
+  for (const x of await db.ideas.toArray()) if (tag.test(JSON.stringify(x))) await db.ideas.put(cleanDeep(x));
+  for (const s of await db.settings.where('key').startsWith('hotelSuggest|').toArray()) if (tag.test(JSON.stringify(s.value))) await db.settings.put({ key: s.key, value: cleanDeep(s.value) });
+}
 import ExpenseEditor from './screens/ExpenseEditor';
 
 interface AppCtxT { openCapture: (h: Holiday) => void; openExpense: (e: Expense | string, opts?: { confirmOnSave?: boolean }) => void }
@@ -32,7 +41,7 @@ function Shell() {
   const [editing, setEditing] = useState<{ e: Expense | string; confirmOnSave?: boolean } | null>(null);
   const inboxCount = useLiveQuery(() => db.expenses.where('status').equals('inbox').count(), [], 0);
 
-  useEffect(() => { ensureDefaults(); requestPersistence(); }, []);
+  useEffect(() => { ensureDefaults(); requestPersistence(); cleanSavedAI(); }, []);
   // When connectivity returns: process captured images that were waiting, refresh exchange rates.
   useEffect(() => {
     if (!online) return;

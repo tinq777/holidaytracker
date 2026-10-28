@@ -1,4 +1,5 @@
 import { loadAISettings, DEFAULT_MODEL } from './index';
+import { cleanText } from './text';
 import { uid } from '../lib/db';
 import type { CityIdeas, IdeaItem } from '../lib/types';
 
@@ -36,7 +37,7 @@ Return:
 - breakfast, lunch, dinner: 3 places each, well-reviewed and popular with locals as well as visitors, across price levels. Prefer long-running places likely still open.${i.hotels.length ? `
   Base these on where they're staying${i.hotels.length > 1 ? ' (spread them across the hotels)' : ''}: breakfast within about a 10-minute walk of the hotel; dinner within a 15-minute walk or a short taxi ride; lunch can be near the hotel or near the top sights. Set "near" to the approximate distance, e.g. "5 min walk from ${i.hotels[0].name}" or "10 min taxi from ${i.hotels[0].name}".` : ''}
 
-Respond with ONLY JSON (no markdown, no commentary):
+Respond with ONLY JSON in plain text (no citation tags, no HTML) (no markdown, no commentary):
 {"see":[{"name":"","note":"","area":"","kids":true}],"events":[{"name":"","note":"","when":"","area":""}],"shop":[{"name":"","note":"","area":"","tag":"Neighbourhood"}],"breakfast":[{"name":"","note":"","area":"","price":"$|$$|$$$","kids":true,"near":""}],"lunch":[...],"dinner":[...]}
 Keep each note under 18 words. "area" is the neighbourhood or district.`;
 
@@ -67,7 +68,7 @@ Keep each note under 18 words. "area" is the neighbourhood or district.`;
 }
 
 function build(i: IdeasInput, parsed: Record<string, unknown>, source: CityIdeas['source']): CityIdeas {
-  const str = (v: unknown) => (typeof v === 'string' && v.trim() ? v.trim() : undefined);
+  const str = (v: unknown) => (typeof v === 'string' && cleanText(v) ? cleanText(v) : undefined);
   const items = (v: unknown): IdeaItem[] => (Array.isArray(v) ? v : []).filter(x => x && str(x.name)).slice(0, 10).map(x => ({
     id: uid(), name: str(x.name)!, note: str(x.note), area: str(x.area), when: str(x.when),
     price: typeof x.price === 'string' && /^\${1,3}$/.test(x.price) ? x.price : undefined,

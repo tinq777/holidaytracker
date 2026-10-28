@@ -1,4 +1,5 @@
 import { loadAISettings, DEFAULT_MODEL } from './index';
+import { cleanText } from './text';
 import type { HotelReport } from '../lib/types';
 
 export interface HotelCheckInput {
@@ -40,7 +41,7 @@ Assess:
 - redFlags: anything that should stop them booking or that they must check first, e.g. noise from bars or roads, construction or renovation, smoking smell, misleading photos, hidden fees, poor cleanliness, safety, location far from transport, and local traps such as a mainland China hotel not licensed to accept foreign passport holders. Empty list if none.
 - verdict: "good" (recommend), "concerns" (ok with caveats) or "red" (avoid or verify first). summary: two sentences max, plain English.
 
-Respond with ONLY JSON, no markdown:
+Respond with ONLY JSON in plain text (no citation tags, no HTML), no markdown:
 {"name":"","area":"","address":"","stars":0,"verdict":"good","summary":"","pricePerNight":0,"currency":"","typicalRange":"","valueNote":"","extras":[""],"location":[{"place":"","time":"","note":""}],"familyFit":"","reviewsGood":[""],"reviewsBad":[""],"redFlags":[""],"sources":[{"title":"","url":""}]}`;
 
   const call = async (search: boolean) => {
@@ -70,7 +71,7 @@ Respond with ONLY JSON, no markdown:
 }
 
 function normalise(p: Record<string, unknown>, i: HotelCheckInput, source: HotelReport['source']): HotelReport {
-  const str = (v: unknown) => (typeof v === 'string' && v.trim() ? v.trim() : undefined);
+  const str = (v: unknown) => (typeof v === 'string' && cleanText(v) ? cleanText(v) : undefined);
   const list = (v: unknown, max = 6) => (Array.isArray(v) ? v.map(str).filter((x): x is string => !!x).slice(0, max) : []);
   const num = (v: unknown) => (typeof v === 'number' && v > 0 ? v : typeof v === 'string' && parseFloat(v) > 0 ? parseFloat(v) : undefined);
   const verdict = p.verdict === 'good' || p.verdict === 'red' ? p.verdict : 'concerns';

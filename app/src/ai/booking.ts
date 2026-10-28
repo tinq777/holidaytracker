@@ -1,4 +1,5 @@
 import { loadAISettings, DEFAULT_MODEL } from './index';
+import { cleanText } from './text';
 import { blobToDataURL } from '../lib/attachments';
 
 /** One booking found in a confirmation (an itinerary PDF can hold several, e.g. flight + hotel package). */
@@ -36,7 +37,7 @@ Rules:
 - Car: pickup/dropoff dates, times and locations.
 - Hotel: city, address, check-in/check-out dates and times, source = booking site if shown (e.g. Booking.com). paid = true if the confirmation says it is prepaid / already charged, false if you pay at the property or it is only reserved with a card guarantee; omit if unclear.
 - confidence 0-1 per booking.
-Respond with ONLY JSON, no markdown:
+Respond with ONLY JSON in plain text (no citation tags, no HTML), no markdown:
 {"bookings":[{"kind":"flight","name":"","total":0,"currency":"","paidDate":"","bookingRef":"","legs":[{"label":"","from":"","to":"","flightNo":"","departDate":"","departTime":"","arriveDate":"","arriveTime":""}],"confidence":0},{"kind":"car","name":"","total":0,"currency":"","bookingRef":"","pickupDate":"","pickupTime":"","pickupPlace":"","dropoffDate":"","dropoffTime":"","dropoffPlace":"","confidence":0},{"kind":"hotel","name":"","total":0,"currency":"","bookingRef":"","city":"","address":"","checkIn":"","checkInTime":"","checkOut":"","checkOutTime":"","source":"","paid":false,"confidence":0}]}
 Include only the bookings actually present. If none, return {"bookings":[]}.`;
 
@@ -56,7 +57,7 @@ Include only the bookings actually present. If none, return {"bookings":[]}.`;
 function clean(list: Record<string, unknown>[]): ExtractedBooking[] {
   const date = (v: unknown) => (typeof v === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(v) ? v : undefined);
   const time = (v: unknown) => (typeof v === 'string' && /^\d{1,2}:\d{2}$/.test(v) ? v.padStart(5, '0') : undefined);
-  const str = (v: unknown) => (typeof v === 'string' && v.trim() ? v.trim() : undefined);
+  const str = (v: unknown) => (typeof v === 'string' && cleanText(v) ? cleanText(v) : undefined);
   const num = (v: unknown) => (typeof v === 'number' && v > 0 ? v : typeof v === 'string' && parseFloat(v) > 0 ? parseFloat(v) : undefined);
   return list.filter(b => b && ['flight', 'car', 'hotel'].includes(b.kind as string)).map(b => {
     const common = { name: str(b.name), total: num(b.total), currency: str(b.currency)?.toUpperCase(), paidDate: date(b.paidDate), bookingRef: str(b.bookingRef), confidence: typeof b.confidence === 'number' ? b.confidence : 0.6 };

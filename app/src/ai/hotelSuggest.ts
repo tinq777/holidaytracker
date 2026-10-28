@@ -1,4 +1,5 @@
 import { loadAISettings, DEFAULT_MODEL } from './index';
+import { cleanText } from './text';
 import { HotelCheckUnavailable } from './hotel';
 
 export interface SuggestInput {
@@ -42,7 +43,7 @@ Return 5 hotels, best fit first. For ${people} people, roomSetup must say exactl
 pricePerNight is the TOTAL for the whole group per night (all rooms) in ${i.currency}, typical for those dates. In mainland China, foreignGuests says whether the hotel is licensed to accept foreign passport holders ("yes", "no" or "unknown"); elsewhere use "yes".
 areaTip: one or two sentences on whether the preferred area is a good base for this trip, and a better alternative if there is one.
 
-Respond with ONLY JSON, no markdown:
+Respond with ONLY JSON in plain text (no citation tags, no HTML), no markdown:
 {"areaTip":"","hotels":[{"name":"","area":"","why":"","roomSetup":"","pricePerNight":0,"currency":"${i.currency}","priceNote":"","near":["12 min walk to …"],"pros":[""],"watchOut":"","foreignGuests":"yes","link":""}]}
 Keep "why" under 20 words, at most 3 pros and 2 "near" items.`;
 
@@ -69,7 +70,7 @@ Keep "why" under 20 words, at most 3 pros and 2 "near" items.`;
 }
 
 function normalise(p: Record<string, unknown>, i: SuggestInput, source: SuggestResult['source']): SuggestResult {
-  const str = (v: unknown) => (typeof v === 'string' && v.trim() ? v.trim() : undefined);
+  const str = (v: unknown) => (typeof v === 'string' && cleanText(v) ? cleanText(v) : undefined);
   const list = (v: unknown, max: number) => (Array.isArray(v) ? v.map(str).filter((x): x is string => !!x).slice(0, max) : []);
   const num = (v: unknown) => (typeof v === 'number' && v > 0 ? v : typeof v === 'string' && parseFloat(v) > 0 ? parseFloat(v) : undefined);
   const hotels = (Array.isArray(p.hotels) ? p.hotels : []).filter(x => x && str(x.name)).slice(0, 6).map((x): HotelSuggestion => ({

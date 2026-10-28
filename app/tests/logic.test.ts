@@ -5,6 +5,7 @@ import { findMatches } from '../src/lib/match.ts';
 import { tripStats, dailySummaries } from '../src/lib/calc.ts';
 import { keywordCategory } from '../src/lib/categorise.ts';
 import { round2 } from '../src/lib/money.ts';
+import { cleanText, cleanDeep } from '../src/ai/text.ts';
 
 let n = 0; const t = (name: string, fn: () => void) => { fn(); n++; process.stdout.write(`✓ ${name}\n`); };
 const ctx = { home: 'AUD', travel: ['CNY'], today: '2027-04-05', paymentMethods: [
@@ -85,5 +86,12 @@ t('unpaid hotels are committed, not spent', () => {
   const s = tripStats(h, [e('f', 'Flights', 600), e('hotel', 'Accommodation', 900, true), e('food', 'Food', 100)], '2026-11-01');
   assert.equal(s.spent, 700); assert.equal(s.toPay, 900); assert.equal(s.committed, 1600); assert.equal(s.remaining, 2400);
   assert.equal(s.dailyBudget, round2((4000 - 1500) / 4));
+});
+t('AI citation tags are stripped', () => {
+  assert.equal(cleanText('<cite index="21-4,21-5">Fantastic location, close to metro</cite>'), 'Fantastic location, close to metro');
+  assert.equal(cleanText('<cite index="28-4">Price is high</cite>. At this price, rooms are dated.'), 'Price is high. At this price, rooms are dated.');
+  assert.equal(cleanText('<cite index="39-3">Two-bedroom units</cite>. <cite index="47-1">Sleep 4</cite>.'), 'Two-bedroom units. Sleep 4.');
+  const r = cleanDeep({ summary: '<cite index="1">Good</cite>', sources: [{ title: 'TA', url: 'https://x.com/<a>' }] });
+  assert.equal(r.summary, 'Good'); assert.equal(r.sources[0].url, 'https://x.com/<a>');
 });
 process.stdout.write(`\n${n} tests passed\n`);

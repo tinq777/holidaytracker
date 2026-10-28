@@ -293,3 +293,4 @@ table.hotel-cmp td:first-child { min-width: 96px; }
 .row.suggest-row { align-items: flex-start; cursor: default; }
 .row.suggest-row .btn.sm { flex: 0 0 auto; }
 .tabs .seg button { font-size: 14px; padding: 0 2px; }
+.rep-list.good, .rep-list.badl { color: var(--ink); }
