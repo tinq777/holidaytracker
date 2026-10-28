@@ -1,5 +1,6 @@
 import { loadAISettings, DEFAULT_MODEL } from './index';
 import { cleanText } from './text';
+import { askClaude, extractJSON } from './claude';
 import { uid } from '../lib/db';
 import type { CityIdeas, IdeaItem } from '../lib/types';
 
@@ -41,29 +42,8 @@ Respond with ONLY JSON in plain text (no citation tags, no HTML) (no markdown, n
 {"see":[{"name":"","note":"","area":"","kids":true}],"events":[{"name":"","note":"","when":"","area":""}],"shop":[{"name":"","note":"","area":"","tag":"Neighbourhood"}],"breakfast":[{"name":"","note":"","area":"","price":"$|$$|$$$","kids":true,"near":""}],"lunch":[...],"dinner":[...]}
 Keep each note under 18 words. "area" is the neighbourhood or district.`;
 
-  const call = async (search: boolean) => {
-    const res = await fetch('https://api.anthropic.com/v1/messages', {
-      method: 'POST',
-      headers: { 'content-type': 'application/json', 'x-api-key': s.apiKey!, 'anthropic-version': '2023-06-01', 'anthropic-dangerous-direct-browser-access': 'true' },
-      body: JSON.stringify({
-        model: s.model || DEFAULT_MODEL, max_tokens: 4000,
-        messages: [{ role: 'user', content: prompt(search) }],
-        ...(search ? { tools: [{ type: 'web_search_20250305', name: 'web_search', max_uses: 4 }] } : {})
-      })
-    });
-    if (!res.ok) throw Object.assign(new Error(`AI request failed (${res.status})`), { status: res.status });
-    const data = await res.json();
-    return ((data.content ?? []) as { type: string; text?: string }[]).filter(c => c.type === 'text').map(c => c.text ?? '').join('');
-  };
-
-  let text: string; let searched = true;
-  try { text = await call(true); }
-  catch (e) {
-    // Web search may not be enabled for this API key: try again without it.
-    if ((e as { status?: number }).status && (e as { status: number }).status < 500) { searched = false; text = await call(false); } else throw e;
-  }
-  const clean = text.replace(/```json|```/g, '');
-  const parsed = JSON.parse(clean.slice(clean.indexOf('{'), clean.lastIndexOf('}') + 1));
+  const { text, searched } = await askClaude({ apiKey: s.apiKey!, model: s.model || DEFAULT_MODEL, content: prompt(true), search: true, maxTokens: 8000, maxSearches: 4 });
+  const parsed = extractJSON(text, 'see');
   return build(i, parsed, searched ? 'ai-search' : 'ai');
 }
 

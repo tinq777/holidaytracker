@@ -6,6 +6,7 @@ import { tripStats, dailySummaries } from '../src/lib/calc.ts';
 import { keywordCategory } from '../src/lib/categorise.ts';
 import { round2 } from '../src/lib/money.ts';
 import { cleanText, cleanDeep } from '../src/ai/text.ts';
+import { extractJSON } from '../src/ai/claude.ts';
 import { bookingComUrl, tripComUrl, parseTripLink, agodaUrl, googleHotelsUrl } from '../src/lib/bookingLinks.ts';
 import { splitEvenly, cityRange, tripStops } from '../src/lib/cityDates.ts';
 
@@ -136,5 +137,9 @@ t('Agoda: share links as-is, hotel pages get the stop dates', () => {
   const u = new URL(agodaUrl({ ...i, agodaLink: 'https://www.agoda.com/shanghai-centre-serviced-apartment/hotel/shanghai-cn.html?checkIn=2027-01-01&los=1' }));
   assert.equal(u.pathname, '/shanghai-centre-serviced-apartment/hotel/shanghai-cn.html');
   assert.equal(u.searchParams.get('checkIn'), '2027-03-20'); assert.equal(u.searchParams.get('los'), '13'); assert.equal(u.searchParams.get('childAges'), '8,5');
+});
+t('AI JSON is found despite chatter and stray braces', () => {
+  const t2 = 'I searched {quickly}. Here you go:\n```json\n{"areaTip":"ok","hotels":[{"name":"A","why":"x {y}"}]}\n``` Hope this helps {:)}';
+  assert.equal((extractJSON(t2, 'hotels').hotels as unknown[]).length, 1);
 });
 process.stdout.write(`\n${n} tests passed\n`);

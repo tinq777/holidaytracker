@@ -6,6 +6,7 @@ import { fmtMoney } from '../lib/money';
 import { nights as countNights } from '../lib/calc';
 import { compressImage } from '../lib/images';
 import { checkHotel, HotelCheckUnavailable } from '../ai/hotel';
+import { AIError } from '../ai/claude';
 import { Field, Sheet, Stepper, useOnline, useUI } from '../components/ui';
 import { getSetting, setSetting } from '../lib/db';
 import { suggestHotels, type SuggestInput, type SuggestResult } from '../ai/hotelSuggest';
@@ -123,7 +124,7 @@ async function startCheck(h: Holiday, ctx: CityCtx, o: { name: string; link?: st
     await db.hotels.update(c.id, { status: 'done', report, name: report.name || c.name });
     toast(`${report.name || 'Hotel'} checked`);
   } catch (e) {
-    const msg = e instanceof HotelCheckUnavailable ? e.message : "Couldn't check that hotel right now. Tap it to try again.";
+    const msg = e instanceof HotelCheckUnavailable || e instanceof AIError ? e.message : "Couldn't check that hotel right now. Tap it to try again.";
     await db.hotels.update(c.id, { status: 'failed', error: msg });
     if (e instanceof HotelCheckUnavailable) return msg;
   }
@@ -158,7 +159,8 @@ function SuggestCard({ h, ctx, shortlisted }: { h: Holiday; ctx: CityCtx; shortl
       setOpen(false);
       if (!r.hotels.length) setErr('No suitable hotels found. Try a different area or budget.');
     } catch (e) {
-      setErr(e instanceof HotelCheckUnavailable ? e.message : "Couldn't get suggestions right now. Try again in a moment.");
+      console.error('Hotel suggestions failed', e);
+      setErr(e instanceof HotelCheckUnavailable || e instanceof AIError ? e.message : `Couldn't get suggestions right now (${(e as Error)?.message ?? 'unknown error'}). Try again in a moment.`);
     } finally { setBusy(false); }
   }
 
@@ -317,7 +319,7 @@ function ReportSheet({ h, c, dates, onClose, onBook }: { h: Holiday; c: HotelCan
     try {
       const report = await checkHotel({ name: r?.name || c.name, link: c.link, city, checkIn: from, checkOut: to, nights: countNights(from, to), adults: h.adults, children: h.children, homeCurrency: h.homeCurrency, places, pricePerNight: c.pricePerNight, currency: c.currency });
       await db.hotels.update(c.id, { status: 'done', report });
-    } catch (e) { await db.hotels.update(c.id, { status: 'failed', error: e instanceof HotelCheckUnavailable ? e.message : "Couldn't check that hotel right now." }); }
+    } catch (e) { await db.hotels.update(c.id, { status: 'failed', error: e instanceof HotelCheckUnavailable || e instanceof AIError ? e.message : "Couldn't check that hotel right now." }); }
   }
   const v = r ? VERDICT[r.verdict] : null;
   return <Sheet title={r?.name || c.name || 'Hotel'} onClose={onClose}>

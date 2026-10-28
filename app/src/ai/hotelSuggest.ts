@@ -1,5 +1,6 @@
 import { loadAISettings, DEFAULT_MODEL } from './index';
 import { cleanText } from './text';
+import { askClaude, extractJSON } from './claude';
 import { HotelCheckUnavailable } from './hotel';
 
 export interface SuggestInput {
@@ -49,26 +50,8 @@ saveTips: 1-2 specific ways to pay less for THIS hotel, e.g. the chain's loyalty
 tripUrl / agodaUrl: the hotel's own page on trip.com / agoda.com if you found it, else empty.
 Keep "why" under 20 words, at most 3 pros and 2 "near" items.`;
 
-  const call = async (search: boolean) => {
-    const res = await fetch('https://api.anthropic.com/v1/messages', {
-      method: 'POST',
-      headers: { 'content-type': 'application/json', 'x-api-key': s.apiKey!, 'anthropic-version': '2023-06-01', 'anthropic-dangerous-direct-browser-access': 'true' },
-      body: JSON.stringify({
-        model: s.model || DEFAULT_MODEL, max_tokens: 3500, messages: [{ role: 'user', content: prompt(search) }],
-        ...(search ? { tools: [{ type: 'web_search_20250305', name: 'web_search', max_uses: 5 }] } : {})
-      })
-    });
-    if (!res.ok) throw Object.assign(new Error(`AI request failed (${res.status})`), { status: res.status });
-    const data = await res.json();
-    return ((data.content ?? []) as { type: string; text?: string }[]).filter(c => c.type === 'text').map(c => c.text ?? '').join('');
-  };
-  let text: string; let searched = true;
-  try { text = await call(true); }
-  catch (e) {
-    if ((e as { status?: number }).status && (e as { status: number }).status < 500) { searched = false; text = await call(false); } else throw e;
-  }
-  const clean = text.replace(/```json|```/g, '');
-  return normalise(JSON.parse(clean.slice(clean.indexOf('{'), clean.lastIndexOf('}') + 1)), i, searched ? 'ai-search' : 'ai');
+  const { text, searched } = await askClaude({ apiKey: s.apiKey!, model: s.model || DEFAULT_MODEL, content: prompt(true), search: true, maxTokens: 8000, maxSearches: 5 });
+  return normalise(extractJSON(text, 'hotels'), i, searched ? 'ai-search' : 'ai');
 }
 
 function normalise(p: Record<string, unknown>, i: SuggestInput, source: SuggestResult['source']): SuggestResult {

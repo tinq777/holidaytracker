@@ -4,6 +4,7 @@ import { db } from '../lib/db';
 import { fmtRange } from '../lib/dates';
 import { cityRange } from '../lib/cityDates';
 import { suggestIdeas, mergeStarred, IdeasUnavailable } from '../ai/ideas';
+import { AIError } from '../ai/claude';
 import { useOnline, useUI } from '../components/ui';
 import type { CityIdeas, Holiday, IdeaItem } from '../lib/types';
 
@@ -51,7 +52,7 @@ function CityCard({ h, city, from, to, fromStays, hotels, ranges, ideas, others 
       await db.ideas.put(mergeStarred(ideas, next));
       toast(`Ideas for ${city} ready`);
     } catch (e) {
-      setErr(e instanceof IdeasUnavailable ? e.message : "Couldn't get suggestions right now. Try again in a moment.");
+      setErr(e instanceof IdeasUnavailable || e instanceof AIError ? e.message : "Couldn't get suggestions right now. Try again in a moment.");
     } finally { setBusy(false); }
   }
 

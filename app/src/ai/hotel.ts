@@ -1,5 +1,6 @@
 import { loadAISettings, DEFAULT_MODEL } from './index';
 import { cleanText } from './text';
+import { askClaude, extractJSON } from './claude';
 import type { HotelReport } from '../lib/types';
 
 export interface HotelCheckInput {
@@ -46,30 +47,11 @@ Assess:
 Respond with ONLY JSON in plain text (no citation tags, no HTML), no markdown:
 {"name":"","area":"","address":"","stars":0,"verdict":"good","summary":"","pricePerNight":0,"currency":"","typicalRange":"","valueNote":"","extras":[""],"location":[{"place":"","time":"","note":""}],"familyFit":"","reviewsGood":[""],"reviewsBad":[""],"redFlags":[""],"saveTips":[""],"tripUrl":"","agodaUrl":"","sources":[{"title":"","url":""}]}`;
 
-  const call = async (search: boolean) => {
-    const content: unknown[] = [];
-    if (i.screenshot) content.push({ type: 'image', source: { type: 'base64', media_type: 'image/jpeg', data: i.screenshot } });
-    content.push({ type: 'text', text: prompt(search) });
-    const res = await fetch('https://api.anthropic.com/v1/messages', {
-      method: 'POST',
-      headers: { 'content-type': 'application/json', 'x-api-key': s.apiKey!, 'anthropic-version': '2023-06-01', 'anthropic-dangerous-direct-browser-access': 'true' },
-      body: JSON.stringify({
-        model: s.model || DEFAULT_MODEL, max_tokens: 3000, messages: [{ role: 'user', content }],
-        ...(search ? { tools: [{ type: 'web_search_20250305', name: 'web_search', max_uses: 5 }] } : {})
-      })
-    });
-    if (!res.ok) throw Object.assign(new Error(`AI request failed (${res.status})`), { status: res.status });
-    const data = await res.json();
-    return ((data.content ?? []) as { type: string; text?: string }[]).filter(c => c.type === 'text').map(c => c.text ?? '').join('');
-  };
-
-  let text: string; let searched = true;
-  try { text = await call(true); }
-  catch (e) {
-    if ((e as { status?: number }).status && (e as { status: number }).status < 500) { searched = false; text = await call(false); } else throw e;
-  }
-  const clean = text.replace(/```json|```/g, '');
-  return normalise(JSON.parse(clean.slice(clean.indexOf('{'), clean.lastIndexOf('}') + 1)), i, searched ? 'ai-search' : 'ai');
+  const content: unknown[] = [];
+  if (i.screenshot) content.push({ type: 'image', source: { type: 'base64', media_type: 'image/jpeg', data: i.screenshot } });
+  content.push({ type: 'text', text: prompt(true) });
+  const { text, searched } = await askClaude({ apiKey: s.apiKey!, model: s.model || DEFAULT_MODEL, content, search: true, maxTokens: 6000, maxSearches: 5 });
+  return normalise(extractJSON(text, 'verdict'), i, searched ? 'ai-search' : 'ai');
 }
 
 function normalise(p: Record<string, unknown>, i: HotelCheckInput, source: HotelReport['source']): HotelReport {
