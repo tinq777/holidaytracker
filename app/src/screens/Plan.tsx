@@ -17,12 +17,11 @@ import { BookingLines, carLines, defaultLegs, legLines, stayLines } from '../com
 import { deleteAttachmentsFor } from '../lib/attachments';
 import { BookingImport } from '../components/BookingImport';
 import Ideas from './Ideas';
-import HotelCheck from './HotelCheck';
 
-type Seg = 'bookings' | 'hotels' | 'ideas' | 'pretrip' | 'packing';
+type Seg = 'bookings' | 'ideas' | 'pretrip' | 'packing';
 
 export default function Plan({ h }: { h: Holiday }) {
-  const [seg, setSeg] = useState<Seg>(() => (sessionStorage.getItem('planSeg') as Seg) || 'bookings');
+  const [seg, setSeg] = useState<Seg>(() => { const v = sessionStorage.getItem('planSeg') as Seg; return ['bookings', 'ideas', 'pretrip', 'packing'].includes(v) ? v : 'bookings'; });
   const pick = (s: Seg) => { setSeg(s); try { sessionStorage.setItem('planSeg', s); } catch { /* ignore */ } };
   const toggleReviewed = (id: string) => {
     const r = h.reviewedLessonIds ?? [];
@@ -30,11 +29,10 @@ export default function Plan({ h }: { h: Holiday }) {
   };
   return <>
     <div className="seg scroll" style={{ marginBottom: 6 }}>
-      {([['bookings', 'Bookings'], ['hotels', 'Hotel check'], ['ideas', 'Ideas'], ['pretrip', 'Before you go'], ['packing', 'Packing']] as [Seg, string][]).map(([k, l]) => <button key={k} className={seg === k ? 'on' : ''} onClick={() => pick(k)}>{l}</button>)}
+      {([['bookings', 'Bookings'], ['ideas', 'Ideas'], ['pretrip', 'Before you go'], ['packing', 'Packing']] as [Seg, string][]).map(([k, l]) => <button key={k} className={seg === k ? 'on' : ''} onClick={() => pick(k)}>{l}</button>)}
     </div>
     {seg === 'bookings' && <Bookings h={h} />}
     {seg === 'ideas' && <Ideas h={h} />}
-    {seg === 'hotels' && <HotelCheck h={h} renderStay={(a, note, done) => <StayEditor h={h} a={a} note={note} onClose={done} />} />}
     {seg === 'pretrip' && <Checklist h={h} list="pretrip" />}
     {seg === 'packing' && <Checklist h={h} list="packing" />}
     <LessonsReminder excludeHolidayId={h.id} reviewed={h.reviewedLessonIds ?? []} onToggle={toggleReviewed} startOpen={false} />
@@ -113,7 +111,7 @@ function BookingRow({ cat, title, price, clips, onClick, children }: { cat: stri
   </button>;
 }
 
-function StayEditor({ h, a, onClose: close, note }: { h: Holiday; a: Accommodation; onClose: () => void; note?: string }) {
+export function StayEditor({ h, a, onClose: close, note }: { h: Holiday; a: Accommodation; onClose: () => void; note?: string }) {
   const onClose = async () => { if (!(await db.accommodations.get(a.id))) await deleteAttachmentsFor(a.id); close(); };
   const [s, setS] = useState(a); const [total, setTotal] = useState(a.total ? String(a.total) : ''); const [home, setHome] = useState(a.homeAmount ? String(a.homeAmount) : '');
   const pms = usePaymentMethods(); const { toast, confirm } = useUI();

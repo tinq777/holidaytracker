@@ -9,10 +9,11 @@ import { confirmExpense } from '../lib/capture';
 import { BudgetBar, CatDot, Header, Icon, Money, Sheet, Field, go, numOr, useUI } from '../components/ui';
 import { useApp } from '../App';
 import type { Expense, Holiday, PaymentMethod } from '../lib/types';
-import Plan from './Plan';
+import Plan, { StayEditor } from './Plan';
+import HotelCheck from './HotelCheck';
 import Review from './Review';
 
-type Tab = 'overview' | 'expenses' | 'plan' | 'review';
+type Tab = 'overview' | 'expenses' | 'plan' | 'hotels' | 'review';
 
 export default function Trip({ id, tab }: { id: string; tab: Tab }) {
   const h = useHoliday(id);
@@ -21,18 +22,19 @@ export default function Trip({ id, tab }: { id: string; tab: Tab }) {
   if (h === null || !h) return <div className="empty"><b>Holiday not found</b><button className="btn" onClick={() => go('/')}>Back to holidays</button></div>;
   const confirmed = expenses.filter(e => e.status === 'confirmed');
   const s = tripStats(h, confirmed);
-  const t: Tab = ['overview', 'expenses', 'plan', 'review'].includes(tab) ? tab : 'overview';
+  const t: Tab = ['overview', 'expenses', 'plan', 'hotels', 'review'].includes(tab) ? tab : 'overview';
   return <>
     <Header title={h.name} back="/" right={<button className="btn ghost" onClick={() => go(`/trip/${h.id}/edit`)}>Edit</button>} />
     <div className="muted small" style={{ textAlign: 'center', marginTop: -8 }}>{h.destinations.join(', ')}{h.destinations.length ? ' · ' : ''}{fmtRange(h.start, h.end)}</div>
     <div className="tabs">
       <div className="seg" role="tablist">
-        {(['overview', 'expenses', 'plan', 'review'] as Tab[]).map(k => <button key={k} role="tab" aria-selected={t === k} className={t === k ? 'on' : ''} onClick={() => go(`/trip/${h.id}/${k}`)}>{k[0].toUpperCase() + k.slice(1)}</button>)}
+        {(['overview', 'expenses', 'plan', 'hotels', 'review'] as Tab[]).map(k => <button key={k} role="tab" aria-selected={t === k} className={t === k ? 'on' : ''} onClick={() => go(`/trip/${h.id}/${k}`)}>{k[0].toUpperCase() + k.slice(1)}</button>)}
       </div>
     </div>
     {t === 'overview' && <Overview h={h} s={s} expenses={expenses} />}
     {t === 'expenses' && <Expenses h={h} s={s} expenses={expenses} />}
     {t === 'plan' && <Plan h={h} />}
+    {t === 'hotels' && <HotelCheck h={h} renderStay={(a, note, done) => <StayEditor h={h} a={a} note={note} onClose={done} />} />}
     {t === 'review' && <Review h={h} s={s} expenses={confirmed} />}
   </>;
 }

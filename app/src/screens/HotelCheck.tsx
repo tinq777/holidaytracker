@@ -6,7 +6,9 @@ import { fmtMoney } from '../lib/money';
 import { nights as countNights } from '../lib/calc';
 import { compressImage } from '../lib/images';
 import { checkHotel, HotelCheckUnavailable } from '../ai/hotel';
-import { Field, Sheet, useOnline, useUI } from '../components/ui';
+import { Field, Sheet, Stepper, useOnline, useUI } from '../components/ui';
+import { getSetting, setSetting } from '../lib/db';
+import { suggestHotels, type SuggestInput, type SuggestResult } from '../ai/hotelSuggest';
 import { useCities } from './Ideas';
 import type { Accommodation, Holiday, HotelCandidate, HotelReport } from '../lib/types';
 
@@ -26,8 +28,10 @@ export default function HotelCheck({ h, renderStay }: { h: Holiday; renderStay: 
   const [open, setOpen] = useState<HotelCandidate | null>(null);
   const [compare, setCompare] = useState(false);
   const [booking, setBooking] = useState<{ a: Accommodation; cand: HotelCandidate } | null>(null);
+  const keyPlacesAll = useKeyPlaces(h, city?.city ?? '');
   if (!city) return <div className="card empty"><b>Add a destination first</b>Edit the trip to add the cities you're visiting.</div>;
   const list = all.filter(x => x.city === city.city);
+  const keyPlaces = keyPlacesAll;
   const done = list.filter(x => x.status === 'done' && x.report);
   const n = countNights(city.from, city.to);
 
@@ -39,12 +43,13 @@ export default function HotelCheck({ h, renderStay }: { h: Holiday; renderStay: 
   }
 
   return <>
-    <p className="small muted" style={{ margin: '10px 4px 12px' }}>Shortlisting hotels? Check each one against your trip: travel times to the places that matter, value for money, whether it suits {h.children ? 'the family' : 'you'}, what reviewers keep saying, and any red flags.</p>
+    <p className="small muted" style={{ margin: '10px 4px 12px' }}>Find the right hotel: get AI suggestions for an area, then check each one against your trip: travel times to the places that matter, value for money, whether it suits {h.children ? 'the family' : 'you'}, what reviewers keep saying, and any red flags.</p>
     {cities.length > 1 && <div className="trip-picker" role="tablist" aria-label="City">{cities.map(c =>
       <button key={c.city} role="tab" aria-selected={c.city === city.city} className={'chip' + (c.city === city.city ? ' on' : '')} onClick={() => setPick(c.city)}>{c.city}<span className="phase">{all.filter(x => x.city === c.city).length || ''}</span></button>)}</div>}
     <div className="small muted" style={{ margin: '0 4px 10px' }}>{city.city} · {fmtRange(city.from, city.to)} · {n} night{n === 1 ? '' : 's'}{!city.fromStays && ' (whole trip; add a hotel booking to set this city\'s dates)'}</div>
 
     <KeyPlaces h={h} city={city.city} />
+    <SuggestCard key={city.city} h={h} ctx={{ city: city.city, from: city.from, to: city.to, places: keyPlaces.all }} shortlisted={list.map(x => (x.report?.name || x.name).toLowerCase())} />
     <CheckForm h={h} city={city.city} from={city.from} to={city.to} />
 
     {list.length > 0 && <div className="section">
@@ -93,6 +98,105 @@ function KeyPlaces({ h, city }: { h: Holiday; city: string }) {
 }
 
 /* ---------- Check a hotel ---------- */
+type CityCtx = { city: string; from: string; to: string; places: string[] };
+/** Adds a hotel to the shortlist and runs the AI check. Returns a message if AI isn't available. */
+async function startCheck(h: Holiday, ctx: CityCtx, o: { name: string; link?: string; thumb?: string; screenshot?: string; pricePerNight?: number; currency?: string }, toast: (m: string) => void): Promise<string | undefined> {
+  const c: HotelCandidate = { id: uid(), holidayId: h.id, city: ctx.city, name: o.name, link: o.link, thumb: o.thumb, pricePerNight: o.pricePerNight, currency: o.currency, status: 'checking', createdAt: Date.now() };
+  await db.hotels.add(c);
+  try {
+    const report = await checkHotel({ name: o.name, link: o.link, screenshot: o.screenshot, city: ctx.city, checkIn: ctx.from, checkOut: ctx.to, nights: countNights(ctx.from, ctx.to), adults: h.adults, children: h.children, homeCurrency: h.homeCurrency, places: ctx.places, pricePerNight: o.pricePerNight, currency: o.currency });
+    await db.hotels.update(c.id, { status: 'done', report, name: report.name || c.name });
+    toast(`${report.name || 'Hotel'} checked`);
+  } catch (e) {
+    const msg = e instanceof HotelCheckUnavailable ? e.message : "Couldn't check that hotel right now. Tap it to try again.";
+    await db.hotels.update(c.id, { status: 'failed', error: msg });
+    if (e instanceof HotelCheckUnavailable) return msg;
+  }
+}
+
+/* ---------- Suggest hotels ---------- */
+const MUST_HAVES = ['Family room', 'Breakfast', 'Near metro', 'Pool', 'Kitchen / apartment', 'Free cancellation'];
+
+function SuggestCard({ h, ctx, shortlisted }: { h: Holiday; ctx: CityCtx; shortlisted: string[] }) {
+  const key = `hotelSuggest|${h.id}|${ctx.city}`;
+  const saved = useLiveQuery(() => getSetting<SuggestResult | null>(key, null), [key]);
+  const [area, setArea] = useState('');
+  const [adults, setAdults] = useState(h.adults);
+  const [children, setChildren] = useState(h.children);
+  const [rooms, setRooms] = useState<SuggestInput['rooms']>('best');
+  const [max, setMax] = useState('');
+  const [cur, setCur] = useState(h.currencies[0] ?? h.homeCurrency);
+  const [style, setStyle] = useState<SuggestInput['style']>('moderate');
+  const [must, setMust] = useState<string[]>(h.children ? ['Family room'] : []);
+  const [busy, setBusy] = useState(false);
+  const [err, setErr] = useState('');
+  const [open, setOpen] = useState(false);
+  const online = useOnline();
+  const { toast } = useUI();
+  const n = countNights(ctx.from, ctx.to);
+
+  async function run() {
+    setErr(''); setBusy(true);
+    try {
+      const r = await suggestHotels({ city: ctx.city, area: area.trim() || undefined, checkIn: ctx.from, checkOut: ctx.to, nights: n, adults, children, rooms, maxPerNight: parseFloat(max) > 0 ? parseFloat(max) : undefined, currency: cur, style, mustHaves: must, places: ctx.places });
+      await setSetting(key, r);
+      setOpen(false);
+      if (!r.hotels.length) setErr('No suitable hotels found. Try a different area or budget.');
+    } catch (e) {
+      setErr(e instanceof HotelCheckUnavailable ? e.message : "Couldn't get suggestions right now. Try again in a moment.");
+    } finally { setBusy(false); }
+  }
+
+  const form = <>
+    <Field label="Area or neighbourhood (optional)"><input className="input" value={area} placeholder={`e.g. near ${ctx.places[0] ?? 'the old town'}`} onChange={e => setArea(e.target.value)} /></Field>
+    <div className="inline">
+      <Field label="Adults"><Stepper value={adults} min={1} onChange={setAdults} /></Field>
+      <Field label="Children"><Stepper value={children} onChange={setChildren} /></Field>
+    </div>
+    <Field label="Rooms"><div className="seg">{([['best', 'Best fit'], ['1', '1 room'], ['2', '2 rooms']] as [SuggestInput['rooms'], string][]).map(([k, l]) => <button key={k} type="button" className={rooms === k ? 'on' : ''} onClick={() => setRooms(k)}>{l}</button>)}</div></Field>
+    <div className="inline">
+      <Field label="Max per night, all rooms"><input className="input num" inputMode="decimal" value={max} placeholder="Any" onChange={e => setMax(e.target.value)} /></Field>
+      <Field label="Currency"><select className="input" value={cur} onChange={e => setCur(e.target.value)}>{[...new Set([...h.currencies, h.homeCurrency])].map(c => <option key={c}>{c}</option>)}</select></Field>
+    </div>
+    <Field label="Style"><div className="seg">{(['budget', 'moderate', 'comfortable'] as SuggestInput['style'][]).map(k => <button key={k} type="button" className={style === k ? 'on' : ''} onClick={() => setStyle(k)}>{k[0].toUpperCase() + k.slice(1)}</button>)}</div></Field>
+    <Field label="Must-haves"><div className="chips">{MUST_HAVES.map(m => <button key={m} type="button" className={'chip' + (must.includes(m) ? ' on' : '')} onClick={() => setMust(must.includes(m) ? must.filter(x => x !== m) : [...must, m])}>{m}</button>)}</div></Field>
+    {err && <div className="notice warn small">{err}</div>}
+    <button className="btn primary block" disabled={busy || !online} onClick={run}>{busy ? 'Finding hotels… up to a minute' : online ? '✨ Suggest hotels' : 'Connect to the internet to search'}</button>
+  </>;
+
+  return <div className="card" style={{ marginBottom: 12 }}>
+    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 8 }}>
+      <b>Suggest hotels</b>
+      {saved && !open && <button className="btn ghost sm" onClick={() => setOpen(true)}>New search</button>}
+    </div>
+    <p className="tiny muted" style={{ margin: '2px 0 10px' }}>Tell AI the area, who's coming and your budget. It suggests real hotels that fit, with how everyone would sleep.</p>
+    {(!saved || open) && form}
+    {saved && !open && <>
+      <div className="small muted" style={{ marginBottom: 8 }}>{[saved.input.area || 'Best area', `${saved.input.adults + saved.input.children} people`, saved.input.maxPerNight ? `up to ${fmtMoney(saved.input.maxPerNight, saved.input.currency)}/night` : '', saved.input.style].filter(Boolean).join(' · ')}</div>
+      {saved.areaTip && <div className="notice soft small">{saved.areaTip}</div>}
+      <div className="group">{saved.hotels.map(x => {
+        const added = shortlisted.includes(x.name.toLowerCase());
+        return <div key={x.name} className="row suggest-row">
+          <div className="grow">
+            <div className="title wrap">{x.name}</div>
+            <div className="hotel-meta">{x.pricePerNight && <span className="num" style={{ color: 'var(--ink)', fontWeight: 600 }}>~{fmtMoney(x.pricePerNight, x.currency ?? cur)}/night</span>}{x.area && <span>{x.area}</span>}{x.foreignGuests === 'no' && <span className="pill bad">No foreign guests</span>}{x.foreignGuests === 'unknown' && /china|shanghai|beijing/i.test(ctx.city) && <span className="pill low">Check foreign guests</span>}</div>
+            {x.roomSetup && <div className="sub wrap" style={{ color: 'var(--ink)' }}>🛏️ {x.roomSetup}</div>}
+            <div className="sub wrap">{x.why}</div>
+            {(x.near.length > 0 || x.pros.length > 0) && <div className="sub wrap">{[...x.near, ...x.pros].join(' · ')}</div>}
+            {x.watchOut && <div className="sub wrap" style={{ color: 'var(--warn)' }}>Watch out: {x.watchOut}</div>}
+            <div className="inline" style={{ marginTop: 8 }}>
+              <button className="btn sm primary" disabled={added || !online} onClick={async () => { const m = await startCheck(h, ctx, { name: x.name, link: x.link, pricePerNight: x.pricePerNight, currency: x.currency }, toast); if (m) setErr(m); }}>{added ? 'On shortlist' : 'Check & shortlist'}</button>
+              <a className="btn sm" href={`https://maps.apple.com/?q=${encodeURIComponent(`${x.name}, ${ctx.city}`)}`} target="_blank" rel="noopener">Map</a>
+            </div>
+          </div>
+        </div>;
+      })}</div>
+      {err && <div className="notice warn small">{err}</div>}
+      <p className="tiny muted" style={{ margin: '8px 2px 0' }}>{saved.source === 'demo' ? 'Demo suggestions, not real hotels.' : `Suggested ${new Date(saved.at).toLocaleDateString('en-AU', { day: 'numeric', month: 'short' })}. Prices are typical rates, not live quotes.`} "Check & shortlist" runs a full Hotel check on it (about 10–15¢).</p>
+    </>}
+  </div>;
+}
+
 function CheckForm({ h, city, from, to }: { h: Holiday; city: string; from: string; to: string }) {
   const { all: places } = useKeyPlaces(h, city);
   const [name, setName] = useState('');
@@ -117,19 +221,10 @@ function CheckForm({ h, city, from, to }: { h: Holiday; city: string; from: stri
     if (!v && !shot) return setErr('Type the hotel name or paste its link, or add a screenshot of the listing.');
     const link = /^https?:\/\//i.test(v) ? v : undefined;
     const per = parseFloat(price) > 0 ? parseFloat(price) : undefined;
-    const c: HotelCandidate = { id: uid(), holidayId: h.id, city, name: link ? '' : v, link, thumb: shot?.thumb, pricePerNight: per, currency: per ? cur : undefined, status: 'checking', createdAt: Date.now() };
-    await db.hotels.add(c);
-    const screenshot = shot?.ai;
+    const screenshot = shot?.ai, thumb = shot?.thumb;
     setName(''); setPrice(''); setShot(null);
-    try {
-      const report = await checkHotel({ name: c.name, link, screenshot, city, checkIn: from, checkOut: to, nights: countNights(from, to), adults: h.adults, children: h.children, homeCurrency: h.homeCurrency, places, pricePerNight: per, currency: c.currency });
-      await db.hotels.update(c.id, { status: 'done', report, name: report.name || c.name });
-      toast(`${report.name || 'Hotel'} checked`);
-    } catch (e) {
-      const msg = e instanceof HotelCheckUnavailable ? e.message : "Couldn't check that hotel right now. Tap it to try again.";
-      await db.hotels.update(c.id, { status: 'failed', error: msg });
-      if (e instanceof HotelCheckUnavailable) setErr(msg);
-    }
+    const msg = await startCheck(h, { city, from, to, places }, { name: link ? '' : v, link, thumb, screenshot, pricePerNight: per, currency: per ? cur : undefined }, toast);
+    if (msg) setErr(msg);
   }
 
   return <div className="card">
