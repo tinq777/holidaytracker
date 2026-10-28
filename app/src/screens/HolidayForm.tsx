@@ -113,6 +113,11 @@ export default function HolidayForm({ id }: { id?: string }) {
       <Field label="Adults"><Stepper value={h.adults} min={1} onChange={n => set('adults', n)} /></Field>
       <Field label="Children"><Stepper value={h.children} onChange={n => set('children', n)} /></Field>
     </div>
+    {h.children > 0 && <Field label="Children's ages" hint="Used so Booking.com and Trip.com show the right family prices.">
+      <div className="chips">{Array.from({ length: h.children }, (_, i) => <select key={i} className="chip" aria-label={`Age of child ${i + 1}`} value={h.childAges?.[i] ?? ''} onChange={e => { const a = [...(h.childAges ?? [])]; a[i] = e.target.value === '' ? undefined : Number(e.target.value); set('childAges', a); }}>
+        <option value="">Child {i + 1}: age?</option>{Array.from({ length: 18 }, (_, n) => <option key={n} value={n}>Child {i + 1}: {n === 0 ? 'under 1' : `${n}`}</option>)}
+      </select>)}</div>
+    </Field>}
     <div className="section-head" style={{ marginTop: 18 }}><h3>Budget</h3>
       <select className="input sm-select" value={h.homeCurrency} onChange={e => set('homeCurrency', e.target.value)} aria-label="Home currency">
         {COMMON_CURRENCIES.map(c => <option key={c}>{c}</option>)}

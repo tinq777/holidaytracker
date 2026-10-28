@@ -39,10 +39,11 @@ Assess:
 - familyFit: will the room sleep ${who}? Family rooms, connecting rooms, cots, pool, kid-friendly or not.
 - reviewsGood / reviewsBad: recurring themes across reviews (not one-offs), each under 12 words.
 - redFlags: anything that should stop them booking or that they must check first, e.g. noise from bars or roads, construction or renovation, smoking smell, misleading photos, hidden fees, poor cleanliness, safety, location far from transport, and local traps such as a mainland China hotel not licensed to accept foreign passport holders. Empty list if none.
+- saveTips: 1-3 specific ways to pay less for THIS hotel (loyalty member rate or perks booking direct, long-stay or advance-purchase rates, free cancellation to rebook if the price drops, a cheaper room type that still fits everyone, paying in local currency rather than home currency at the desk). Only tips that genuinely apply.
 - verdict: "good" (recommend), "concerns" (ok with caveats) or "red" (avoid or verify first). summary: two sentences max, plain English.
 
 Respond with ONLY JSON in plain text (no citation tags, no HTML), no markdown:
-{"name":"","area":"","address":"","stars":0,"verdict":"good","summary":"","pricePerNight":0,"currency":"","typicalRange":"","valueNote":"","extras":[""],"location":[{"place":"","time":"","note":""}],"familyFit":"","reviewsGood":[""],"reviewsBad":[""],"redFlags":[""],"sources":[{"title":"","url":""}]}`;
+{"name":"","area":"","address":"","stars":0,"verdict":"good","summary":"","pricePerNight":0,"currency":"","typicalRange":"","valueNote":"","extras":[""],"location":[{"place":"","time":"","note":""}],"familyFit":"","reviewsGood":[""],"reviewsBad":[""],"redFlags":[""],"saveTips":[""],"sources":[{"title":"","url":""}]}`;
 
   const call = async (search: boolean) => {
     const content: unknown[] = [];
@@ -81,7 +82,7 @@ function normalise(p: Record<string, unknown>, i: HotelCheckInput, source: Hotel
     pricePerNight: num(p.pricePerNight) ?? i.pricePerNight, currency: str(p.currency)?.toUpperCase() ?? i.currency, typicalRange: str(p.typicalRange), valueNote: str(p.valueNote),
     extras: list(p.extras),
     location: (Array.isArray(p.location) ? p.location : []).filter(x => x && str(x.place) && str(x.time)).slice(0, 8).map(x => ({ place: str(x.place)!, time: str(x.time)!, note: str(x.note) })),
-    familyFit: str(p.familyFit), reviewsGood: list(p.reviewsGood), reviewsBad: list(p.reviewsBad), redFlags: list(p.redFlags),
+    familyFit: str(p.familyFit), reviewsGood: list(p.reviewsGood), reviewsBad: list(p.reviewsBad), redFlags: list(p.redFlags), saveTips: list(p.saveTips, 3),
     sources: (Array.isArray(p.sources) ? p.sources : []).filter(x => x && typeof x.url === 'string' && /^https?:\/\//.test(x.url)).slice(0, 6).map(x => ({ title: str(x.title) ?? new URL(x.url).hostname, url: x.url })),
     source, checkedAt: Date.now()
   };
@@ -101,6 +102,7 @@ async function demoReport(i: HotelCheckInput): Promise<HotelReport> {
     familyFit: bad ? 'Rooms are small; 4 people would need two rooms.' : 'Family room with two double beds fits 2 adults and 2 children.',
     reviewsGood: ['Helpful front desk', 'Close to metro'], reviewsBad: bad ? ['Thin walls, street noise', 'Dated bathrooms'] : ['Road noise on lower floors'],
     redFlags: bad ? ['Demo: check it accepts foreign passport holders before booking'] : [],
+    saveTips: ['Demo: free cancellation, so rebook if the price drops'],
     sources: []
   }, i, 'demo');
 }

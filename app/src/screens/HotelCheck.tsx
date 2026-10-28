@@ -10,6 +10,14 @@ import { Field, Sheet, Stepper, useOnline, useUI } from '../components/ui';
 import { getSetting, setSetting } from '../lib/db';
 import { suggestHotels, type SuggestInput, type SuggestResult } from '../ai/hotelSuggest';
 import { useCities } from './Ideas';
+import { BookingButtons } from '../components/BookingButtons';
+import type { LinkInput } from '../lib/bookingLinks';
+
+const linkFor = (h: Holiday, name: string, city: string, from: string, to: string, adults = h.adults, children = h.children, rooms?: number): LinkInput => ({
+  name, city, checkIn: from, checkOut: to, adults,
+  childAges: Array.from({ length: children }, (_, i) => h.childAges?.[i]),
+  rooms: rooms ?? (adults + children > 4 ? 2 : 1)
+});
 import type { Accommodation, Holiday, HotelCandidate, HotelReport } from '../lib/types';
 
 const VERDICT: Record<HotelReport['verdict'], { label: string; cls: string }> = {
@@ -57,7 +65,7 @@ export default function HotelCheck({ h, renderStay }: { h: Holiday; renderStay: 
       <div className="group">{list.map(c => <CandidateRow key={c.id} c={c} onOpen={() => setOpen(c)} />)}</div>
     </div>}
 
-    {open && <ReportSheet h={h} c={all.find(x => x.id === open.id) ?? open} onClose={() => setOpen(null)} onBook={book} />}
+    {open && <ReportSheet h={h} c={all.find(x => x.id === open.id) ?? open} dates={[city.from, city.to]} onClose={() => setOpen(null)} onBook={book} />}
     {compare && <CompareSheet list={done} onClose={() => setCompare(false)} onOpen={c => { setCompare(false); setOpen(c); }} />}
     {booking && renderStay(booking.a, `Filled in from Hotel check. Price is ${n} night${n === 1 ? '' : 's'} × the nightly rate; adjust to what you actually paid.`, async () => {
       const saved = await db.accommodations.get(booking.a.id);
@@ -183,11 +191,13 @@ function SuggestCard({ h, ctx, shortlisted }: { h: Holiday; ctx: CityCtx; shortl
             {x.roomSetup && <div className="sub wrap" style={{ color: 'var(--ink)' }}>🛏️ {x.roomSetup}</div>}
             <div className="sub wrap">{x.why}</div>
             {(x.near.length > 0 || x.pros.length > 0) && <div className="sub wrap">{[...x.near, ...x.pros].join(' · ')}</div>}
+            {x.saveTips?.length > 0 && <div className="sub wrap save-tip">💡 {x.saveTips.join(' · ')}</div>}
             {x.watchOut && <div className="sub wrap" style={{ color: 'var(--warn)' }}>Watch out: {x.watchOut}</div>}
             <div className="inline" style={{ marginTop: 8 }}>
               <button className="btn sm primary" disabled={added || !online} onClick={async () => { const m = await startCheck(h, ctx, { name: x.name, link: x.link, pricePerNight: x.pricePerNight, currency: x.currency }, toast); if (m) setErr(m); }}>{added ? 'On shortlist' : 'Check & shortlist'}</button>
               <a className="btn sm" href={`https://maps.apple.com/?q=${encodeURIComponent(`${x.name}, ${ctx.city}`)}`} target="_blank" rel="noopener">Map</a>
             </div>
+            <div className="inline site-row"><BookingButtons small link={linkFor(h, x.name, ctx.city, ctx.from, ctx.to, saved.input.adults, saved.input.children, saved.input.rooms === 'best' ? undefined : Number(saved.input.rooms))} /></div>
           </div>
         </div>;
       })}</div>
@@ -264,7 +274,7 @@ function CandidateRow({ c, onOpen }: { c: HotelCandidate; onOpen: () => void }) 
   </button>;
 }
 
-function ReportSheet({ h, c, onClose, onBook }: { h: Holiday; c: HotelCandidate; onClose: () => void; onBook: (c: HotelCandidate) => void }) {
+function ReportSheet({ h, c, dates, onClose, onBook }: { h: Holiday; c: HotelCandidate; dates: [string, string]; onClose: () => void; onBook: (c: HotelCandidate) => void }) {
   const { confirm } = useUI();
   const r = c.report;
   async function retry() {
@@ -306,9 +316,13 @@ function ReportSheet({ h, c, onClose, onBook }: { h: Holiday; c: HotelCandidate;
         {r.reviewsBad.length > 0 && <ul className="rep-list badl">{r.reviewsBad.map(x => <li key={x}>{x}</li>)}</ul>}
         {!r.reviewsGood.length && !r.reviewsBad.length && <span className="muted">No review themes found.</span>}
       </div>
+      {(r.saveTips?.length ?? 0) > 0 && <><div className="rep-head">Ways to save</div><div className="card small"><ul className="rep-list">{r.saveTips!.map(x => <li key={x}>{x}</li>)}</ul></div></>}
       {r.sources.length > 0 && <><div className="rep-head">Sources</div><div className="group">{r.sources.map(s => <a key={s.url} className="row" href={s.url} target="_blank" rel="noopener"><div className="grow"><div className="title wrap">{s.title}</div><div className="sub">{new URL(s.url).hostname}</div></div></a>)}</div></>}
       <p className="tiny muted" style={{ margin: '10px 4px' }}>{r.source === 'demo' ? 'Demo report, not a real hotel. Choose Claude in More → AI reading for real checks.' : `${r.source === 'ai' ? 'Web search was unavailable, so this is from Claude\'s own knowledge. ' : ''}Checked ${new Date(r.checkedAt).toLocaleDateString('en-AU', { day: 'numeric', month: 'short' })}. Travel times are estimates; confirm anything important before booking.`}</p>
     </>}
+    <div className="rep-head">Your price</div>
+    <div className="inline site-row" style={{ marginBottom: 6 }}><BookingButtons link={linkFor(h, r?.name || c.name, c.city, dates[0], dates[1])} /></div>
+    <p className="tiny muted" style={{ margin: '0 4px 10px' }}>Opens with your dates and guests filled in. Log in there to see your member price (Genius, Trip.com member rates).{h.children > 0 && (h.childAges ?? []).filter(a => a !== undefined).length < h.children ? ' Add the children\'s ages in Edit trip for accurate family prices.' : ''}</p>
     {c.link && <a className="btn block" href={c.link} target="_blank" rel="noopener" style={{ marginBottom: 8 }}>Open listing</a>}
     <a className="btn block" href={`https://maps.apple.com/?q=${encodeURIComponent(`${r?.name || c.name}, ${c.city}`)}`} target="_blank" rel="noopener">Show on map</a>
     {r && !c.chosenStayId && <button className="btn primary block" style={{ marginTop: 8 }} onClick={() => onBook(c)}>Book this one</button>}

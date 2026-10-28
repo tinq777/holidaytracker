@@ -6,6 +6,7 @@ import { tripStats, dailySummaries } from '../src/lib/calc.ts';
 import { keywordCategory } from '../src/lib/categorise.ts';
 import { round2 } from '../src/lib/money.ts';
 import { cleanText, cleanDeep } from '../src/ai/text.ts';
+import { bookingComUrl, tripComUrl } from '../src/lib/bookingLinks.ts';
 
 let n = 0; const t = (name: string, fn: () => void) => { fn(); n++; process.stdout.write(`✓ ${name}\n`); };
 const ctx = { home: 'AUD', travel: ['CNY'], today: '2027-04-05', paymentMethods: [
@@ -93,5 +94,12 @@ t('AI citation tags are stripped', () => {
   assert.equal(cleanText('<cite index="39-3">Two-bedroom units</cite>. <cite index="47-1">Sleep 4</cite>.'), 'Two-bedroom units. Sleep 4.');
   const r = cleanDeep({ summary: '<cite index="1">Good</cite>', sources: [{ title: 'TA', url: 'https://x.com/<a>' }] });
   assert.equal(r.summary, 'Good'); assert.equal(r.sources[0].url, 'https://x.com/<a>');
+});
+t('booking links carry dates, guests and child ages', () => {
+  const i = { name: 'Ascott Huai Hai Road', city: 'Shanghai', checkIn: '2027-04-02', checkOut: '2027-04-08', adults: 3, childAges: [8, 5], rooms: 2, currency: 'CNY' };
+  const b = new URL(bookingComUrl(i)).searchParams;
+  assert.equal(b.get('checkin'), '2027-04-02'); assert.equal(b.get('group_adults'), '3'); assert.equal(b.get('group_children'), '2'); assert.deepEqual(b.getAll('age'), ['8', '5']); assert.equal(b.get('no_rooms'), '2');
+  const t2 = new URL(tripComUrl(i)).searchParams;
+  assert.equal(t2.get('checkin'), '2027/04/02'); assert.equal(t2.get('ages'), '8,5'); assert.equal(t2.get('crn'), '2');
 });
 process.stdout.write(`\n${n} tests passed\n`);

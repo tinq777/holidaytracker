@@ -30,6 +30,8 @@ export interface Holiday {
   reviewedLessonIds?: string[];
   /** Hotel check: places that matter in each city (theme park, station…), added by the user. */
   keyPlaces?: Record<string, string[]>;
+  /** Ages of the children, for family prices on Booking.com / Trip.com links. */
+  childAges?: (number | undefined)[];
   createdAt: number;
 }
 
@@ -121,7 +123,7 @@ export interface HotelReport {
   verdict: 'good' | 'concerns' | 'red'; summary: string;
   pricePerNight?: number; currency?: string; valueNote?: string; typicalRange?: string; extras: string[];
   location: { place: string; time: string; note?: string }[];
-  familyFit?: string; reviewsGood: string[]; reviewsBad: string[]; redFlags: string[];
+  familyFit?: string; reviewsGood: string[]; reviewsBad: string[]; redFlags: string[]; saveTips?: string[];
   sources: { title: string; url: string }[];
   source: 'ai-search' | 'ai' | 'demo'; checkedAt: number;
 }
