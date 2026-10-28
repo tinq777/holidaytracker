@@ -78,16 +78,41 @@ export default function HotelCheck({ h, renderStay }: { h: Holiday; renderStay: 
 }
 
 /* ---------- Places that matter ---------- */
+const HOME_AIRPORTS = ['SYD', 'MEL', 'AVV', 'BNE', 'PER', 'ADL', 'CBR', 'OOL', 'HBA', 'CNS', 'DRW'];
+/** Airports we can place in a city, so each stop only suggests its own. Unknown codes show everywhere. */
+const AIRPORT_CITY: Record<string, string> = { PVG: 'shanghai', SHA: 'shanghai', PEK: 'beijing', PKX: 'beijing', CAN: 'guangzhou', SZX: 'shenzhen', HKG: 'hong kong', CTU: 'chengdu', TFU: 'chengdu', XIY: "xi'an", DPS: 'bali', NRT: 'tokyo', HND: 'tokyo', KIX: 'osaka', ICN: 'seoul', SIN: 'singapore', BKK: 'bangkok', DMK: 'bangkok', KUL: 'kuala lumpur', AKL: 'auckland' };
+
 function useKeyPlaces(h: Holiday, city: string) {
-  const ideas = useLiveQuery(() => db.ideas.get(`${h.id}|${city}`), [h.id, city]);
+  // Ideas for this city, matched loosely (a leg typed "shanghai" still finds the "Shanghai" ideas).
+  const ideas = useLiveQuery(async () => {
+    const exact = await db.ideas.get(`${h.id}|${city}`); if (exact) return exact;
+    const c = city.trim().toLowerCase();
+    return (await db.ideas.where('holidayId').equals(h.id).toArray()).find(x => x.city.trim().toLowerCase() === c || (c && (x.city.toLowerCase().includes(c) || c.includes(x.city.toLowerCase()))));
+  }, [h.id, city]);
+  // Airports from your flights, and car hire pick-up/drop-off spots.
+  const transport = useLiveQuery(async () => {
+    const ex = await db.expenses.where('holidayId').equals(h.id).toArray();
+    const out: string[] = [];
+    for (const e of ex) {
+      for (const l of e.legs ?? []) for (const raw of [l.from, l.to]) {
+        const code = raw?.trim().toUpperCase() ?? '';
+        if (!/^[A-Z]{3}$/.test(code) || HOME_AIRPORTS.includes(code)) continue;
+        const at = AIRPORT_CITY[code];
+        if (!at || at === city.trim().toLowerCase()) out.push(`${code} airport`);
+      }
+      if (e.category === 'Car hire') for (const p of [e.pickupPlace, e.dropoffPlace]) if (p) out.push(p);
+    }
+    return [...new Set(out)];
+  }, [h.id, city], [] as string[]);
   const own = h.keyPlaces?.[city] ?? [];
   const starred = ideas ? [...ideas.see, ...ideas.events, ...(ideas.shop ?? [])].filter(x => x.starred).map(x => x.name) : [];
-  const suggestions = ideas ? ideas.see.map(x => x.name).filter(n => !own.includes(n) && !starred.includes(n)).slice(0, 4) : [];
-  return { own, starred, suggestions, all: [...new Set([...own, ...starred])] };
+  const fromIdeas = ideas ? ideas.see.map(x => x.name) : [];
+  const suggestions = [...fromIdeas.slice(0, 4), ...transport].filter(n => !own.includes(n) && !starred.includes(n)).slice(0, 6);
+  return { own, starred, suggestions, hasIdeas: !!ideas, all: [...new Set([...own, ...starred])] };
 }
 
 function KeyPlaces({ h, city }: { h: Holiday; city: string }) {
-  const { own, starred, suggestions } = useKeyPlaces(h, city);
+  const { own, starred, suggestions, hasIdeas } = useKeyPlaces(h, city);
   const [text, setText] = useState('');
   const save = (list: string[]) => db.holidays.update(h.id, { keyPlaces: { ...(h.keyPlaces ?? {}), [city]: list } });
   const add = (p: string) => { const v = p.trim(); if (v && !own.includes(v)) save([...own, v]); setText(''); };
@@ -97,13 +122,14 @@ function KeyPlaces({ h, city }: { h: Holiday; city: string }) {
     <div className="chips">
       {starred.map(p => <span key={p} className="chip home-chip">★ {p}</span>)}
       {own.map(p => <button key={p} className="chip on" onClick={() => save(own.filter(x => x !== p))}>{p} <span className="x">✕</span></button>)}
-      {!starred.length && !own.length && <span className="small muted">None yet. Starred Ideas show up here too.</span>}
+      {!starred.length && !own.length && <span className="small muted">None added yet.</span>}
     </div>
     <div className="inline" style={{ marginTop: 10 }}>
       <input className="input" value={text} placeholder="e.g. Shanghai Disneyland" onChange={e => setText(e.target.value)} onKeyDown={e => e.key === 'Enter' && (e.preventDefault(), add(text))} />
       <button className="btn" style={{ flex: '0 0 auto' }} onClick={() => add(text)}>Add</button>
     </div>
-    {suggestions.length > 0 && <div className="chips" style={{ marginTop: 8 }}>{suggestions.map(s => <button key={s} className="chip" onClick={() => add(s)}>+ {s}</button>)}</div>}
+    {suggestions.length > 0 && <><div className="tiny muted" style={{ margin: '10px 2px 4px' }}>Tap to add:</div><div className="chips">{suggestions.map(s => <button key={s} className="chip" onClick={() => add(s)}>+ {s}</button>)}</div></>}
+    {!hasIdeas && <p className="tiny muted" style={{ margin: '10px 2px 0' }}>For one-tap suggestions here, get <a href={`#/trip/${h.id}/plan`} onClick={() => { try { sessionStorage.setItem('planSeg', 'ideas'); } catch { /* ignore */ } }}>Ideas for {city}</a> (Plan → Ideas). Its top sights appear here, and anything you star there is added automatically.</p>}
   </div>;
 }
 
