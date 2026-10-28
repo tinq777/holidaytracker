@@ -128,6 +128,6 @@ t('Agoda and Google Hotels links', () => {
   const i = { name: 'Ascott', city: 'Shanghai', checkIn: '2027-04-02', checkOut: '2027-04-08', adults: 2, childAges: [8, 5], rooms: 1 };
   const a = new URL(agodaUrl(i)).searchParams;
   assert.equal(a.get('checkIn'), '2027-04-02'); assert.equal(a.get('los'), '6'); assert.equal(a.get('childages'), '8,5'); assert.equal(a.get('adults'), '2');
-  assert.ok(new URL(googleHotelsUrl(i)).searchParams.get('q')!.includes('2027-04-02 to 2027-04-08'));
+  assert.equal(new URL(googleHotelsUrl(i)).searchParams.get('q'), 'Ascott Shanghai');
 });
 process.stdout.write(`\n${n} tests passed\n`);

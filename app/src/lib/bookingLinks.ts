@@ -55,10 +55,10 @@ export function agodaUrl(i: LinkInput) {
   return `https://www.agoda.com/search?${p}`;
 }
 
-/** Google Hotels: compares this hotel's price across many sites, often including the hotel's own website. */
+/** Google Hotels for this hotel. Google doesn't accept dates in a link, so the search is just the hotel and city
+ *  (adding dates to the text made Google show a whole-city list instead of the hotel). */
 export function googleHotelsUrl(i: LinkInput) {
-  const people = i.adults + i.childAges.length;
-  return `https://www.google.com/travel/search?${new URLSearchParams({ q: `${i.name} ${i.city} ${i.checkIn} to ${i.checkOut} ${people} guests` })}`;
+  return `https://www.google.com/travel/search?${new URLSearchParams({ q: `${i.name} ${i.city}`, hl: 'en-AU', gl: 'au' })}`;
 }
 
 export const opensTripApp = (i: LinkInput) => { const t = parseTripLink(i.tripLink); return !!(t.hotelId || t.short); };
