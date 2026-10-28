@@ -2,7 +2,8 @@ import { useEffect, useState } from 'react';
 import { db, uid, deleteHoliday } from '../lib/db';
 import { seedChecklists } from '../lib/checklists';
 import { COMMON_CURRENCIES, fmtMoney } from '../lib/money';
-import { daysBetween } from '../lib/dates';
+import { daysBetween, fmtDate } from '../lib/dates';
+import { splitEvenly } from '../lib/cityDates';
 import { getSetting, setSetting } from '../lib/db';
 import { estimateBudget, BudgetEstimateUnavailable, type SpendStyle } from '../ai/budget';
 import { refreshRates } from '../lib/rates';
@@ -72,6 +73,13 @@ export default function HolidayForm({ id }: { id?: string }) {
 
   const set = <K extends keyof Holiday>(k: K, v: Holiday[K]) => setH(p => ({ ...p, [k]: v }));
   const addDest = () => { const d = dest.trim(); if (d && !h.destinations.includes(d)) set('destinations', [...h.destinations, d]); setDest(''); };
+  const removeDest = (d: string) => setH(p => { const cd = { ...(p.cityDates ?? {}) }; delete cd[d]; return { ...p, destinations: p.destinations.filter(x => x !== d), cityDates: cd }; });
+  const setLeg = (city: string, k: 'from' | 'to', v: string) => setH(p => {
+    const cd = { ...(p.cityDates ?? {}) }; const cur = cd[city] ?? { from: '', to: '' };
+    const next = { ...cur, [k]: v };
+    if (k === 'from' && next.to && next.to <= v) next.to = '';
+    cd[city] = next; return { ...p, cityDates: cd };
+  });
   const addCurrency = (c: string) => { if (c && c !== h.homeCurrency && !h.currencies.includes(c)) set('currencies', [...h.currencies, c]); };
 
   async function save() {
@@ -100,7 +108,7 @@ export default function HolidayForm({ id }: { id?: string }) {
     <Header title={id ? 'Edit holiday' : 'New holiday'} back={id ? `/trip/${id}` : '/'} right={<button className="btn ghost" onClick={save}>Save</button>} />
     <Field label="Holiday name"><input className="input" value={h.name} placeholder="China 2027" onChange={e => set('name', e.target.value)} autoFocus={!id} /></Field>
     <Field label="Destinations">
-      {h.destinations.length > 0 && <div className="chips" style={{ marginBottom: 8 }}>{h.destinations.map(d => <button key={d} type="button" className="chip on" onClick={() => set('destinations', h.destinations.filter(x => x !== d))}>{d} <span className="x">✕</span></button>)}</div>}
+      {h.destinations.length > 0 && <div className="chips" style={{ marginBottom: 8 }}>{h.destinations.map(d => <button key={d} type="button" className="chip on" onClick={() => removeDest(d)}>{d} <span className="x">✕</span></button>)}</div>}
       <div className="inline"><input className="input" value={dest} placeholder="Shanghai" onChange={e => setDest(e.target.value)} onKeyDown={e => e.key === 'Enter' && (e.preventDefault(), addDest())} />
         <button type="button" className="btn" style={{ flex: '0 0 auto' }} onClick={addDest}>Add</button></div>
     </Field>
@@ -109,6 +117,23 @@ export default function HolidayForm({ id }: { id?: string }) {
       <Field label="End"><input className="input" type="date" value={h.end} min={h.start} onChange={e => set('end', e.target.value)} /></Field>
     </div>
     {days !== null && <div className="trip-length"><b>{days}</b> day{days === 1 ? '' : 's'} · <b>{nights}</b> night{nights === 1 ? '' : 's'}</div>}
+    {h.destinations.length > 1 && h.start && h.end && h.end > h.start && <div className="card legs" style={{ marginBottom: 14 }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+        <b>Dates in each city</b>
+        <button type="button" className="btn ghost sm" onClick={() => set('cityDates', splitEvenly(h.start, h.end, h.destinations))}>Split evenly</button>
+      </div>
+      <p className="tiny muted" style={{ margin: '2px 0 8px' }}>Hotel suggestions, Booking.com and Trip.com links and Ideas use these dates for each city.</p>
+      {h.destinations.map(c => { const l = h.cityDates?.[c]; const n = l?.from && l.to && l.to > l.from ? daysBetween(l.from, l.to) : 0;
+        const out = l?.from && (l.from < h.start || (l.to && l.to > h.end));
+        return <div key={c} className="leg-row">
+          <div className="leg-city"><b>{c}</b><span className="tiny muted">{n ? `${n} night${n === 1 ? '' : 's'}` : 'Not set'}</span></div>
+          <div className="inline">
+            <Field label="Arrive"><input className="input" type="date" value={l?.from ?? ''} min={h.start} max={h.end} onChange={e => setLeg(c, 'from', e.target.value)} /></Field>
+            <Field label="Leave"><input className="input" type="date" value={l?.to ?? ''} min={l?.from || h.start} max={h.end} onChange={e => setLeg(c, 'to', e.target.value)} /></Field>
+          </div>
+          {out && <div className="tiny" style={{ color: 'var(--warn)', margin: '-4px 4px 6px' }}>Outside the trip dates ({fmtDate(h.start)} – {fmtDate(h.end)})</div>}
+        </div>; })}
+    </div>}
     <div className="inline">
       <Field label="Adults"><Stepper value={h.adults} min={1} onChange={n => set('adults', n)} /></Field>
       <Field label="Children"><Stepper value={h.children} onChange={n => set('children', n)} /></Field>

@@ -10,6 +10,7 @@ import { Field, Sheet, Stepper, useOnline, useUI } from '../components/ui';
 import { getSetting, setSetting } from '../lib/db';
 import { suggestHotels, type SuggestInput, type SuggestResult } from '../ai/hotelSuggest';
 import { useCities } from './Ideas';
+import { cityRange } from '../lib/cityDates';
 import { BookingButtons } from '../components/BookingButtons';
 import type { LinkInput } from '../lib/bookingLinks';
 
@@ -54,7 +55,7 @@ export default function HotelCheck({ h, renderStay }: { h: Holiday; renderStay: 
     <p className="small muted" style={{ margin: '10px 4px 12px' }}>Find the right hotel: get AI suggestions for an area, then check each one against your trip: travel times to the places that matter, value for money, whether it suits {h.children ? 'the family' : 'you'}, what reviewers keep saying, and any red flags.</p>
     {cities.length > 1 && <div className="trip-picker" role="tablist" aria-label="City">{cities.map(c =>
       <button key={c.city} role="tab" aria-selected={c.city === city.city} className={'chip' + (c.city === city.city ? ' on' : '')} onClick={() => setPick(c.city)}>{c.city}<span className="phase">{all.filter(x => x.city === c.city).length || ''}</span></button>)}</div>}
-    <div className="small muted" style={{ margin: '0 4px 10px' }}>{city.city} · {fmtRange(city.from, city.to)} · {n} night{n === 1 ? '' : 's'}{!city.fromStays && ' (whole trip; add a hotel booking to set this city\'s dates)'}</div>
+    <div className="small muted" style={{ margin: '0 4px 10px' }}>{city.city} · {fmtRange(city.from, city.to)} · {n} night{n === 1 ? '' : 's'}{!city.fromStays && <> (whole trip). <a href={`#/trip/${h.id}/edit`}>Set dates for each city</a></>}</div>
 
     <KeyPlaces h={h} city={city.city} />
     <SuggestCard key={city.city} h={h} ctx={{ city: city.city, from: city.from, to: city.to, places: keyPlaces.all }} shortlisted={list.map(x => (x.report?.name || x.name).toLowerCase())} />
@@ -281,8 +282,7 @@ function ReportSheet({ h, c, dates, onClose, onBook }: { h: Holiday; c: HotelCan
     await db.hotels.update(c.id, { status: 'checking', error: undefined });
     const city = c.city;
     const stays = await db.accommodations.where('holidayId').equals(h.id).toArray();
-    const mine = stays.filter(a => !a.layover && a.city && a.city.toLowerCase().includes(city.toLowerCase()));
-    const from = mine.length ? mine.map(a => a.checkIn).sort()[0] : h.start; const to = mine.length ? mine.map(a => a.checkOut).sort().slice(-1)[0] : h.end;
+    const { from, to } = cityRange(h, stays, city);
     const ideas = await db.ideas.get(`${h.id}|${city}`);
     const places = [...new Set([...(h.keyPlaces?.[city] ?? []), ...(ideas ? [...ideas.see, ...ideas.events, ...(ideas.shop ?? [])].filter(x => x.starred).map(x => x.name) : [])])];
     try {

@@ -299,3 +299,5 @@ table.hotel-cmp td:first-child { min-width: 96px; }
 .btn.site-btn { flex: 1 1 0; text-align: center; justify-content: center; }
 .btn.site-btn.booking { background: #003B95; color: #fff; }
 .btn.site-btn.trip { background: #287DFA; color: #fff; }
+.legs .leg-row + .leg-row { border-top: 1px solid var(--line); padding-top: 10px; margin-top: 2px; }
+.leg-city { display: flex; justify-content: space-between; align-items: baseline; margin: 0 4px 6px; }

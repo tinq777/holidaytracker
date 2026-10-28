@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { useLiveQuery } from 'dexie-react-hooks';
 import { db } from '../lib/db';
 import { fmtRange } from '../lib/dates';
+import { cityRange } from '../lib/cityDates';
 import { suggestIdeas, mergeStarred, IdeasUnavailable } from '../ai/ideas';
 import { useOnline, useUI } from '../components/ui';
 import type { CityIdeas, Holiday, IdeaItem } from '../lib/types';
@@ -16,11 +17,9 @@ export function useCities(h: Holiday) {
   const names = [...h.destinations];
   for (const a of stays) if (!a.layover && a.city && !names.some(n => norm(n) === norm(a.city))) names.push(a.city);
   return names.map(city => {
-    const mine = stays.filter(a => !a.layover && a.city && (norm(a.city).includes(norm(city)) || norm(city).includes(norm(a.city))));
-    const from = mine.length ? mine.map(a => a.checkIn).sort()[0] : h.start;
-    const to = mine.length ? mine.map(a => a.checkOut).sort().slice(-1)[0] : h.end;
+    const { from, to, dated, mine } = cityRange(h, stays, city);
     const hotels: HotelRef[] = mine.filter(a => a.hotel).sort((a, b) => a.checkIn.localeCompare(b.checkIn)).map(a => ({ name: a.hotel, address: a.address, from: a.checkIn, to: a.checkOut }));
-    return { city, from, to, fromStays: mine.length > 0, hotels };
+    return { city, from, to, fromStays: dated, hotels };
   }).sort((a, b) => a.from.localeCompare(b.from));
 }
 
@@ -64,7 +63,7 @@ function CityCard({ h, city, from, to, fromStays, hotels, ideas, others }: { h: 
   return <div className="section city-ideas">
     <div className="section-head">
       <button className="city-title" onClick={() => setOpen(!open)} aria-expanded={open}>
-        <h3>{city}</h3><span className="small muted">{fmtRange(from, to)}{!fromStays && ' (whole trip)'}</span>
+        <h3>{city}</h3><span className="small muted">{fmtRange(from, to)}{!fromStays && ' (whole trip; set city dates in Edit trip)'}</span>
       </button>
       <button className="btn ghost sm" disabled={busy || !online} onClick={run}>{busy ? 'Thinking…' : ideas ? 'Refresh' : '✨ Suggest'}</button>
     </div>

@@ -32,6 +32,8 @@ export interface Holiday {
   keyPlaces?: Record<string, string[]>;
   /** Ages of the children, for family prices on Booking.com / Trip.com links. */
   childAges?: (number | undefined)[];
+  /** Dates in each destination (legs), e.g. Shanghai 20 Mar–2 Apr. Used by Hotels and Ideas. */
+  cityDates?: Record<string, { from: string; to: string }>;
   createdAt: number;
 }
 

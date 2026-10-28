@@ -7,6 +7,7 @@ import { keywordCategory } from '../src/lib/categorise.ts';
 import { round2 } from '../src/lib/money.ts';
 import { cleanText, cleanDeep } from '../src/ai/text.ts';
 import { bookingComUrl, tripComUrl } from '../src/lib/bookingLinks.ts';
+import { splitEvenly, cityRange } from '../src/lib/cityDates.ts';
 
 let n = 0; const t = (name: string, fn: () => void) => { fn(); n++; process.stdout.write(`✓ ${name}\n`); };
 const ctx = { home: 'AUD', travel: ['CNY'], today: '2027-04-05', paymentMethods: [
@@ -101,5 +102,12 @@ t('booking links carry dates, guests and child ages', () => {
   assert.equal(b.get('checkin'), '2027-04-02'); assert.equal(b.get('group_adults'), '3'); assert.equal(b.get('group_children'), '2'); assert.deepEqual(b.getAll('age'), ['8', '5']); assert.equal(b.get('no_rooms'), '2');
   const t2 = new URL(tripComUrl(i)).searchParams;
   assert.equal(t2.get('checkin'), '2027/04/02'); assert.equal(t2.get('ages'), '8,5'); assert.equal(t2.get('crn'), '2');
+});
+t('city legs: split evenly and take priority over whole trip', () => {
+  const s = splitEvenly('2027-03-20', '2027-04-20', ['Shanghai', 'Beijing']);
+  assert.deepEqual(s, { Shanghai: { from: '2027-03-20', to: '2027-04-05' }, Beijing: { from: '2027-04-05', to: '2027-04-20' } });
+  const h = { id: 'h', name: 'C', destinations: ['Shanghai', 'Beijing'], start: '2027-03-20', end: '2027-04-20', homeCurrency: 'AUD', currencies: [], adults: 2, children: 2, budget: 1, categories: [], categoryBudgets: {}, createdAt: 0, cityDates: s };
+  assert.equal(cityRange(h, [], 'Beijing').from, '2027-04-05'); assert.equal(cityRange(h, [], 'Beijing').dated, true);
+  assert.equal(cityRange({ ...h, cityDates: undefined }, [], 'Beijing').from, '2027-03-20');
 });
 process.stdout.write(`\n${n} tests passed\n`);
