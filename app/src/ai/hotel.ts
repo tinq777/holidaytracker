@@ -35,7 +35,7 @@ ${i.screenshot ? 'A screenshot of the listing is attached: read the hotel name, 
 ${search ? 'Use web search to find this exact hotel (right branch, right city), its address, and recent guest reviews from the last 2 years (Google, TripAdvisor, Booking.com, Trip.com, Ctrip and similar).' : 'You cannot search the web, so rely on what you know and say so in the summary; mark anything uncertain.'}
 
 Assess:
-- location: for each place that matters, the realistic door-to-door time and mode, e.g. "12 min walk", "25 min metro (Line 2)", "35 min taxi". Add the nearest metro/train station if not listed.
+- location: for each place that matters, "time" is ONE short door-to-door time and mode, max 4 words, e.g. "12 min walk", "25 min metro", "35 min taxi". Put alternatives, line numbers and costs in "note" (one short sentence). Add the nearest metro/train station if not listed.
 - value: compare the price with similar hotels in that area for those dates. typicalRange like "900-1300 CNY". extras = costs or inclusions to know (breakfast, extra bed or cot fees, city tax, deposit, parking).
 - familyFit: will the room sleep ${who}? Family rooms, connecting rooms, cots, pool, kid-friendly or not.
 - reviewsGood / reviewsBad: recurring themes across reviews (not one-offs), each under 12 words.

@@ -332,14 +332,16 @@ function ReportSheet({ h, c, dates, onClose, onBook }: { h: Holiday; c: HotelCan
       </div>
       {r.redFlags.length > 0 && <div className="notice bad"><b>Red flags</b><ul className="rep-list">{r.redFlags.map(x => <li key={x}>{x}</li>)}</ul></div>}
       <div className="rep-head">Getting around</div>
-      {r.location.length ? <div className="group">{r.location.map(l => <div key={l.place} className="row"><div className="grow"><div className="title wrap">{l.place}</div>{l.note && <div className="sub wrap">{l.note}</div>}</div><div className="end small" style={{ fontWeight: 600 }}>{l.time}</div></div>)}</div>
+      {r.location.length ? <div className="group">{r.location.map(l => <div key={l.place} className="row loc-row"><div className="loc-top"><span className="title wrap">{l.place}</span><span className="loc-time">{l.time}</span></div>{l.note && <div className="sub wrap">{l.note}</div>}</div>)}</div>
         : <div className="card muted small">Add places that matter to see travel times.</div>}
+      {((r.pricePerNight ?? c.pricePerNight) || r.valueNote || r.extras.length > 0) && <>
       <div className="rep-head">Value</div>
       <div className="card small">
         {(r.pricePerNight ?? c.pricePerNight) && <div><b className="num">{fmtMoney(r.pricePerNight ?? c.pricePerNight, r.currency ?? c.currency ?? '')}</b> per night{r.typicalRange && <span className="muted"> · typical for the area {r.typicalRange}</span>}</div>}
         {r.valueNote && <div style={{ marginTop: 4 }}>{r.valueNote}</div>}
         {r.extras.length > 0 && <ul className="rep-list">{r.extras.map(x => <li key={x}>{x}</li>)}</ul>}
       </div>
+      </>}
       {r.familyFit && <><div className="rep-head">{h.children ? 'Family fit' : 'Room fit'}</div><div className="card small">{r.familyFit}</div></>}
       <div className="rep-head">What reviewers say</div>
       <div className="card small">
