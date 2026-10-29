@@ -12,6 +12,7 @@ import { getSetting, setSetting } from '../lib/db';
 import { suggestHotels, type SuggestInput, type SuggestResult } from '../ai/hotelSuggest';
 import { tripStops, type Stop } from '../lib/cityDates';
 import { BookingButtons } from '../components/BookingButtons';
+import { PriceInHome, homePrice, useRate } from '../components/PriceInHome';
 import { isAgodaHotel, isAgodaShort, opensAgodaHotel, opensTripApp, parseTripLink, type LinkInput } from '../lib/bookingLinks';
 
 const linkFor = (h: Holiday, name: string, city: string, from: string, to: string, adults = h.adults, children = h.children, rooms?: number, tripLink?: string, agodaLink?: string): LinkInput => ({
@@ -64,11 +65,11 @@ export default function HotelCheck({ h, renderStay }: { h: Holiday; renderStay: 
 
     {list.length > 0 && <div className="section">
       <div className="section-head"><h3>Shortlist</h3>{done.length >= 2 && <button className="btn ghost sm" onClick={() => setCompare(true)}>Compare {done.length}</button>}</div>
-      <div className="group">{list.map(c => <CandidateRow key={c.id} c={c} onOpen={() => setOpen(c)} />)}</div>
+      <div className="group">{list.map(c => <CandidateRow key={c.id} c={c} onOpen={() => setOpen(c)} home={h.homeCurrency} nights={n} />)}</div>
     </div>}
 
     {open && <ReportSheet h={h} c={all.find(x => x.id === open.id) ?? open} dates={[city.from, city.to]} onClose={() => setOpen(null)} onBook={book} />}
-    {compare && <CompareSheet list={done} onClose={() => setCompare(false)} onOpen={c => { setCompare(false); setOpen(c); }} />}
+    {compare && <CompareSheet list={done} home={h.homeCurrency} nights={n} onClose={() => setCompare(false)} onOpen={c => { setCompare(false); setOpen(c); }} />}
     {booking && renderStay(booking.a, `Filled in from Hotel check. Price is ${n} night${n === 1 ? '' : 's'} × the nightly rate; adjust to what you actually paid.`, async () => {
       const saved = await db.accommodations.get(booking.a.id);
       if (saved) await db.hotels.update(booking.cand.id, { chosenStayId: saved.id });
@@ -223,6 +224,7 @@ function SuggestCard({ h, ctx, shortlisted }: { h: Holiday; ctx: CityCtx; shortl
           <div className="grow">
             <div className="title wrap">{x.name}</div>
             <div className="hotel-meta">{x.pricePerNight && <span className="num" style={{ color: 'var(--ink)', fontWeight: 600 }}>~{fmtMoney(x.pricePerNight, x.currency ?? cur)}/night</span>}{x.area && <span>{x.area}</span>}{x.foreignGuests === 'no' && <span className="pill bad">No foreign guests</span>}{x.foreignGuests === 'unknown' && /china|shanghai|beijing/i.test(ctx.city) && <span className="pill low">Check foreign guests</span>}</div>
+            <PriceInHome amount={x.pricePerNight} currency={x.currency ?? cur} home={h.homeCurrency} nights={n} strong />
             {x.roomSetup && <div className="sub wrap" style={{ color: 'var(--ink)' }}>🛏️ {x.roomSetup}</div>}
             <div className="sub wrap">{x.why}</div>
             {(x.near.length > 0 || x.pros.length > 0) && <div className="sub wrap">{[...x.near, ...x.pros].join(' · ')}</div>}
@@ -289,7 +291,7 @@ function CheckForm({ h, city, legId, from, to }: { h: Holiday; city: string; leg
 }
 
 /* ---------- Shortlist ---------- */
-function CandidateRow({ c, onOpen }: { c: HotelCandidate; onOpen: () => void }) {
+function CandidateRow({ c, onOpen, home, nights }: { c: HotelCandidate; onOpen: () => void; home: string; nights: number }) {
   const r = c.report; const per = r?.pricePerNight ?? c.pricePerNight; const v = r ? VERDICT[r.verdict] : null;
   return <button className="row hotel-row" onClick={onOpen}>
     {c.thumb ? <img className="attach-thumb" src={c.thumb} alt="" /> : <span className="attach-thumb icon">🏨</span>}
@@ -305,6 +307,7 @@ function CandidateRow({ c, onOpen }: { c: HotelCandidate; onOpen: () => void }) 
         {r?.area && <span>{r.area}</span>}
         {r && r.redFlags.length > 0 && <span className="bad">{r.redFlags.length} red flag{r.redFlags.length > 1 ? 's' : ''}</span>}
       </div>
+      {per && <PriceInHome amount={per} currency={r?.currency ?? c.currency} home={home} nights={nights} />}
     </div>
   </button>;
 }
@@ -364,6 +367,7 @@ function ReportSheet({ h, c, dates, onClose, onBook }: { h: Holiday; c: HotelCan
       <div className="rep-head">Value</div>
       <div className="card small">
         {(r.pricePerNight ?? c.pricePerNight) && <div><b className="num">{fmtMoney(r.pricePerNight ?? c.pricePerNight, r.currency ?? c.currency ?? '')}</b> per night{r.typicalRange && <span className="muted"> · typical for the area {r.typicalRange}</span>}</div>}
+        <PriceInHome amount={r.pricePerNight ?? c.pricePerNight} currency={r.currency ?? c.currency} home={h.homeCurrency} nights={countNights(dates[0], dates[1])} strong />
         {r.valueNote && <div style={{ marginTop: 4 }}>{r.valueNote}</div>}
         {r.extras.length > 0 && <ul className="rep-list">{r.extras.map(x => <li key={x}>{x}</li>)}</ul>}
       </div>
@@ -397,12 +401,18 @@ function ReportSheet({ h, c, dates, onClose, onBook }: { h: Holiday; c: HotelCan
 }
 
 /* ---------- Compare ---------- */
-function CompareSheet({ list, onClose, onOpen }: { list: HotelCandidate[]; onClose: () => void; onOpen: (c: HotelCandidate) => void }) {
+function CompareSheet({ list, home, nights, onClose, onOpen }: { list: HotelCandidate[]; home: string; nights: number; onClose: () => void; onOpen: (c: HotelCandidate) => void }) {
+  const curs = [...new Set(list.map(c => c.report!.currency ?? c.currency).filter((x): x is string => !!x && x !== home))];
+  const r1 = useRate(curs[0], home), r2 = useRate(curs[1], home);
+  const rateFor = (cur?: string) => (!cur || cur === home ? 1 : cur === curs[0] ? r1 : cur === curs[1] ? r2 : undefined);
+  const hp = (c: HotelCandidate) => { const cur = c.report!.currency ?? c.currency; return homePrice(c.report!.pricePerNight ?? c.pricePerNight, cur ?? home, home, nights, rateFor(cur)); };
   const places = [...new Set(list.flatMap(c => c.report!.location.map(l => l.place)))].slice(0, 6);
   const time = (c: HotelCandidate, p: string) => c.report!.location.find(l => l.place === p)?.time ?? '—';
   const rows: [string, (c: HotelCandidate) => React.ReactNode][] = [
     ['Verdict', c => <span className={'pill ' + VERDICT[c.report!.verdict].cls}>{VERDICT[c.report!.verdict].label}</span>],
     ['Per night', c => { const p = c.report!.pricePerNight ?? c.pricePerNight; return p ? fmtMoney(p, c.report!.currency ?? c.currency ?? '') : '—'; }],
+    [`${home} per night`, c => { const p = hp(c); return p?.per ? `≈ ${fmtMoney(p.per, home)}` : '—'; }],
+    [`${home} total (${nights} night${nights === 1 ? '' : 's'})`, c => { const p = hp(c); return p?.total ? <b>≈ {fmtMoney(p.total, home)}</b> : '—'; }],
     ['Typical', c => c.report!.typicalRange ?? '—'],
     ['Area', c => c.report!.area ?? '—'],
     ...places.map(p => [p, (c: HotelCandidate) => time(c, p)] as [string, (c: HotelCandidate) => React.ReactNode]),

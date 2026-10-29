@@ -320,3 +320,6 @@ table.hotel-cmp td:first-child { min-width: 96px; }
 .loc-top .title { flex: 1 1 auto; min-width: 0; }
 .loc-time { font-weight: 650; font-size: 15px; color: var(--link); }
 .row.loc-row .sub { margin-top: 3px; white-space: normal; }
+.home-price { font-size: 14px; color: var(--muted); margin-top: 3px; font-variant-numeric: tabular-nums; }
+.home-price.strong { color: var(--ink); font-weight: 600; }
+.home-price.missing { font-weight: 400; color: var(--warn); font-size: 13px; }
