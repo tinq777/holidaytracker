@@ -323,3 +323,10 @@ table.hotel-cmp td:first-child { min-width: 96px; }
 .home-price { font-size: 14px; color: var(--muted); margin-top: 3px; font-variant-numeric: tabular-nums; }
 .home-price.strong { color: var(--ink); font-weight: 600; }
 .home-price.missing { font-weight: 400; color: var(--warn); font-size: 13px; }
+.watch-line { display: flex; flex-wrap: wrap; gap: 4px 6px; margin: 3px 0; }
+.price-watch { margin-bottom: 12px; }
+.notice.good-notice { background: var(--good-bg); }
+.end.good { color: var(--good); } .end.bad { color: var(--bad); }
+.price-banner { display: block; width: 100%; text-align: left; border: 0; cursor: pointer; font: inherit; color: var(--ink); margin: 0 0 12px; }
+.price-banner.good { background: var(--good-bg); }
+.price-banner > div + div { margin-top: 4px; }

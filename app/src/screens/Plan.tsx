@@ -16,6 +16,8 @@ import { Attachments, ClipCount, useAttachmentCount } from '../components/Attach
 import { BookingLines, carLines, defaultLegs, legLines, stayLines } from '../components/Booking';
 import { deleteAttachmentsFor } from '../lib/attachments';
 import { BookingImport } from '../components/BookingImport';
+import { BookingButtons } from '../components/BookingButtons';
+import { cancelDaysLeft, latestCheck, saving } from '../lib/priceWatch';
 import Ideas from './Ideas';
 
 type Seg = 'bookings' | 'ideas' | 'pretrip' | 'packing';
@@ -94,6 +96,7 @@ function Bookings({ h }: { h: Holiday }) {
           return <BookingRow key={a.id} cat="Accommodation" title={<>{a.hotel}{a.layover && <> <span className="pill low">Layover</span></>}</>} clips={clips[a.id]} onClick={() => setEdit(a)}
             price={<Money v={cost} c={c} className="title" />}>
             {a.paid === false && <div style={{ margin: '2px 0' }}><span className="pill unpaid">Not paid yet</span></div>}
+            <WatchLine a={a} />
             <div className="sub">{a.city ? a.city + ' · ' : ''}<span className="num">{n} night{n > 1 ? 's' : ''} · {fmtMoney(cost / n, c)}/night</span></div>
             <BookingLines lines={stayLines(a)} />{a.bookingRef && <div className="sub">Ref {a.bookingRef}</div>}
           </BookingRow>; })}</div>}
@@ -109,6 +112,53 @@ function BookingRow({ cat, title, price, clips, onClick, children }: { cat: stri
     <div className="booking-top"><CatDot cat={cat} /><div className="grow title">{title}<ClipCount n={clips} /></div><div className="end">{price}</div></div>
     <div className="booking-body">{children}</div>
   </button>;
+}
+
+/** Under a stay in Bookings: free-cancellation deadline and any cheaper price found. */
+function WatchLine({ a }: { a: Accommodation }) {
+  const d = cancelDaysLeft(a); const sv = saving(a);
+  if (!a.freeCancelUntil) return null;
+  const when = fmtDate(a.freeCancelUntil, { day: 'numeric', month: 'short' });
+  if (d === undefined) return <div className="sub">Free cancellation ended {when}</div>;
+  return <div className="watch-line">
+    {sv && sv > 0 ? <span className="pill ok">↓ {fmtMoney(sv, a.currency)} cheaper found</span> : null}
+    <span className={'pill' + (d <= 7 ? ' low' : '')}>Free cancel until {when}</span>
+  </div>;
+}
+
+const SITES = ['Booking.com', 'Trip.com', 'Agoda', 'Google', 'Hotel direct', 'Other'];
+
+/** Log today's price for the same room and dates; shows the difference from what you booked. */
+function PriceWatch({ h, a, onChecks }: { h: Holiday; a: Accommodation; onChecks: (pc: Accommodation['priceChecks']) => void }) {
+  const [price, setPrice] = useState(''); const [site, setSite] = useState(a.source && SITES.includes(a.source) ? a.source : 'Booking.com');
+  const { toast } = useUI();
+  const checks = (a.priceChecks ?? []).slice().sort((x, y) => y.at - x.at);
+  const d = cancelDaysLeft(a); const sv = saving(a); const last = latestCheck(a);
+  const kids = Array.from({ length: h.children }, (_, i) => h.childAges?.[i]);
+  async function add() {
+    const v = numOr(price); if (!v) return toast("Enter today's total price");
+    const next = [{ id: uid(), at: Date.now(), total: v, currency: a.currency, site }, ...(a.priceChecks ?? [])].slice(0, 20);
+    await db.accommodations.update(a.id, { priceChecks: next }); onChecks(next); setPrice('');
+    const diff = a.total - v;
+    toast(diff > 0 ? `${fmtMoney(diff, a.currency)} cheaper than you booked` : diff < 0 ? `${fmtMoney(-diff, a.currency)} more than you booked` : 'Same as you booked');
+  }
+  return <div className="card price-watch">
+    <b>Price watch</b>
+    <p className="tiny muted" style={{ margin: '2px 0 8px' }}>You booked {fmtMoney(a.total, a.currency)} for the stay{a.freeCancelUntil ? `, free cancellation until ${fmtDate(a.freeCancelUntil, { day: 'numeric', month: 'short' })}${d === undefined ? ' (passed)' : d === 0 ? ' (today)' : ` (${d} day${d === 1 ? '' : 's'} left)`}` : ''}. Check the same room and dates, then log the total here.</p>
+    {sv !== undefined && last && <div className={'notice small ' + (sv > 0 ? 'good-notice' : 'soft')}>
+      {sv > 0 ? <><b>↓ {fmtMoney(sv, a.currency)} cheaper</b> on {last.site} ({new Date(last.at).toLocaleDateString('en-AU', { day: 'numeric', month: 'short' })}).{d !== undefined ? ` Book the new rate first, then cancel this one before ${fmtDate(a.freeCancelUntil!, { day: 'numeric', month: 'short' })}.` : a.freeCancelUntil ? ' Free cancellation has ended, so check the cancellation fee first.' : ' Check your cancellation terms before rebooking.'}</>
+        : sv < 0 ? <>Latest price is {fmtMoney(-sv, a.currency)} higher than you booked. Your booking is the better deal.</> : <>Same price as you booked.</>}
+    </div>}
+    <div className="site-row" style={{ marginBottom: 8 }}><BookingButtons small link={{ name: a.hotel, city: a.city, checkIn: a.checkIn, checkOut: a.checkOut, adults: h.adults, childAges: kids, rooms: h.adults + h.children > 4 ? 2 : 1, currency: a.currency }} /></div>
+    <div className="inline">
+      <Field label={`Today's total (${a.currency})`}><input className="input num" inputMode="decimal" value={price} placeholder={String(a.total)} onChange={e => setPrice(e.target.value)} /></Field>
+      <Field label="Where"><select className="input" value={site} onChange={e => setSite(e.target.value)}>{SITES.map(x => <option key={x}>{x}</option>)}</select></Field>
+    </div>
+    <button className="btn block" onClick={add}>Log price</button>
+    {checks.length > 0 && <div className="group" style={{ marginTop: 10 }}>{checks.slice(0, 5).map(c => { const diff = c.currency === a.currency ? a.total - c.total : 0;
+      return <div key={c.id} className="row" style={{ cursor: 'default' }}><div className="grow"><div className="title">{fmtMoney(c.total, c.currency)}</div><div className="sub">{c.site} · {new Date(c.at).toLocaleDateString('en-AU', { day: 'numeric', month: 'short' })}</div></div>
+        <div className={'end small' + (diff > 0 ? ' good' : diff < 0 ? ' bad' : '')} style={{ fontWeight: 600 }}>{diff > 0 ? `↓ ${fmtMoney(diff, a.currency)}` : diff < 0 ? `↑ ${fmtMoney(-diff, a.currency)}` : 'Same'}</div></div>; })}</div>}
+  </div>;
 }
 
 export function StayEditor({ h, a, onClose: close, note }: { h: Holiday; a: Accommodation; onClose: () => void; note?: string }) {
@@ -148,10 +198,12 @@ export function StayEditor({ h, a, onClose: close, note }: { h: Holiday; a: Acco
       <Field label="Booking source"><input className="input" value={s.source ?? ''} placeholder="Trip.com, Booking.com…" onChange={e => set('source', e.target.value)} /></Field>
       <Field label="Booking reference"><input className="input" value={s.bookingRef ?? ''} placeholder="Optional" onChange={e => set('bookingRef', e.target.value || undefined)} /></Field>
     </div>
+    <Field label="Free cancellation until" hint="Optional. The app reminds you to recheck prices before this date, while you can still cancel and rebook."><input className="input" type="date" value={s.freeCancelUntil ?? ''} max={s.checkIn} onChange={e => set('freeCancelUntil', e.target.value || undefined)} /></Field>
     <Field label="Paid with"><select className="input" value={s.paymentMethodId ?? ''} onChange={e => set('paymentMethodId', e.target.value || undefined)}><option value="">—</option>{pms.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}</select></Field>
     <label className="switch"><span><b>Paid already</b><div className="small muted">{s.paid === false ? 'Not charged yet: counted as "still to pay", not spent' : 'Counted as spent'}</div></span><input type="checkbox" checked={s.paid !== false} onChange={e => set('paid', e.target.checked)} /></label>
     <label className="switch"><span><b>Layover / transit stay</b><div className="small muted">Highlighted in the trip review</div></span><input type="checkbox" checked={s.layover} onChange={e => set('layover', e.target.checked)} /></label>
     {n > 0 && numOr(total) ? <div className="notice info num">{n} night{n > 1 ? 's' : ''} · {fmtMoney((numOr(total) ?? 0) / n, s.currency)} per night</div> : null}
+    {exists && (numOr(total) ?? 0) > 0 && <PriceWatch h={h} a={{ ...exists, ...s, total: numOr(total) ?? 0 }} onChecks={pc => set('priceChecks', pc)} />}
     <Attachments holidayId={h.id} ownerId={a.id} label="Booking confirmation" />
     <button className="btn primary block" onClick={save}>Save stay</button>
     {exists && <><div className="spacer" /><button className="btn danger block" onClick={async () => { if (await confirm({ title: 'Delete this stay?', body: 'Its cost will be removed from the budget too.', ok: 'Delete', danger: true })) { await deleteAccommodation(a.id); onClose(); } }}>Delete stay</button></>}

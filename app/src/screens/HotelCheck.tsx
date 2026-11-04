@@ -12,6 +12,7 @@ import { getSetting, setSetting } from '../lib/db';
 import { suggestHotels, type SuggestInput, type SuggestResult } from '../ai/hotelSuggest';
 import { tripStops, type Stop } from '../lib/cityDates';
 import { BookingButtons } from '../components/BookingButtons';
+import { PriceWatchBanner } from '../components/PriceWatchBanner';
 import { PriceInHome, homePrice, useRate } from '../components/PriceInHome';
 import { isAgodaHotel, isAgodaShort, opensAgodaHotel, opensTripApp, parseTripLink, type LinkInput } from '../lib/bookingLinks';
 
@@ -59,6 +60,7 @@ export default function HotelCheck({ h, renderStay }: { h: Holiday; renderStay: 
       <button key={c.id} role="tab" aria-selected={c.id === city.id} className={'chip' + (c.id === city.id ? ' on' : '')} onClick={() => setPick(c.id)}>{c.label}<span className="phase">{all.filter(x => belongs(x, c, cities)).length || ''}</span></button>)}</div>}
     <div className="small muted" style={{ margin: '0 4px 10px' }}>{city.city} · {fmtRange(city.from, city.to)} · {n} night{n === 1 ? '' : 's'}{!city.dated && <> (whole trip). <a href={`#/trip/${h.id}/edit`}>Add trip legs</a> to set each city's dates.</>}</div>
 
+    <PriceWatchBanner h={h} />
     <KeyPlaces h={h} city={city.city} />
     <SuggestCard key={city.id} h={h} ctx={{ city: city.city, legId: city.id, from: city.from, to: city.to, places: keyPlaces.all }} shortlisted={list.map(x => (x.report?.name || x.name).toLowerCase())} />
     <CheckForm h={h} city={city.city} legId={city.id} from={city.from} to={city.to} />

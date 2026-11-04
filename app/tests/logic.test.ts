@@ -7,6 +7,7 @@ import { keywordCategory } from '../src/lib/categorise.ts';
 import { round2 } from '../src/lib/money.ts';
 import { cleanText, cleanDeep } from '../src/ai/text.ts';
 import { extractJSON } from '../src/ai/claude.ts';
+import { saving, cancelDaysLeft, dueRechecks, cheaperFound } from '../src/lib/priceWatch.ts';
 import { bookingComUrl, tripComUrl, parseTripLink, agodaUrl, googleHotelsUrl } from '../src/lib/bookingLinks.ts';
 import { splitEvenly, cityRange, tripStops } from '../src/lib/cityDates.ts';
 
@@ -141,5 +142,16 @@ t('Agoda: share links as-is, hotel pages get the stop dates', () => {
 t('AI JSON is found despite chatter and stray braces', () => {
   const t2 = 'I searched {quickly}. Here you go:\n```json\n{"areaTip":"ok","hotels":[{"name":"A","why":"x {y}"}]}\n``` Hope this helps {:)}';
   assert.equal((extractJSON(t2, 'hotels').hotels as unknown[]).length, 1);
+});
+t('hotel price watch: saving, deadline, reminders', () => {
+  const base = { id: 'a', holidayId: 'h', hotel: 'Hilton', city: 'Shanghai', checkIn: '2027-03-20', checkOut: '2027-04-02', total: 6600, currency: 'CNY', layover: false, createdAt: 0 };
+  const today = '2027-02-20';
+  const a = { ...base, freeCancelUntil: '2027-03-01', priceChecks: [{ id: '1', at: Date.now() - 10 * 86400000, total: 6000, currency: 'CNY', site: 'Trip.com' }] };
+  assert.equal(saving(a), 600); assert.equal(cancelDaysLeft(a, today), 9);
+  assert.equal(cheaperFound([a], today).length, 1);
+  const b = { ...base, id: 'b', freeCancelUntil: '2027-03-01' };
+  assert.deepEqual(dueRechecks([b], today).map(x => x.id), ['b']);
+  assert.equal(dueRechecks([{ ...b, freeCancelUntil: '2027-02-10' }], today).length, 0);
+  assert.equal(dueRechecks([{ ...b, priceChecks: [{ id: '2', at: Date.now(), total: 6600, currency: 'CNY', site: 'x' }] }], today).length, 0);
 });
 process.stdout.write(`\n${n} tests passed\n`);

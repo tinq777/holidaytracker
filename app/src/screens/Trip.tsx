@@ -11,6 +11,7 @@ import { useApp } from '../App';
 import type { Expense, Holiday, PaymentMethod } from '../lib/types';
 import Plan, { StayEditor } from './Plan';
 import HotelCheck from './HotelCheck';
+import { PriceWatchBanner } from '../components/PriceWatchBanner';
 import Review from './Review';
 
 type Tab = 'overview' | 'expenses' | 'plan' | 'hotels' | 'review';
@@ -78,6 +79,7 @@ function Overview({ h, s, expenses }: { h: Holiday; s: TripStats; expenses: Expe
         <span className="grow"><b>{inbox} expense{inbox > 1 ? 's' : ''} to confirm</b><div className="sub">Not counted in the budget until confirmed</div></span><Icon name="chev" size={18} /></button>}
     </div>
 
+    <PriceWatchBanner h={h} />
     {s.phase === 'past' && lessons === 0 && <button className="notice row" onClick={() => go(`/trip/${h.id}/review`)}>
       <span className="grow"><b>Trip finished. What did you learn?</b><div className="sub">Add a few lessons and they'll remind you next time.</div></span><Icon name="chev" size={18} /></button>}
 

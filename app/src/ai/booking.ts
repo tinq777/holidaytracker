@@ -6,7 +6,7 @@ import { blobToDataURL } from '../lib/attachments';
 export type ExtractedBooking =
   | ({ kind: 'flight' } & Common & { legs: { label?: string; from?: string; to?: string; flightNo?: string; departDate?: string; departTime?: string; arriveDate?: string; arriveTime?: string }[] })
   | ({ kind: 'car' } & Common & { pickupDate?: string; pickupTime?: string; pickupPlace?: string; dropoffDate?: string; dropoffTime?: string; dropoffPlace?: string })
-  | ({ kind: 'hotel' } & Common & { city?: string; address?: string; checkIn?: string; checkInTime?: string; checkOut?: string; checkOutTime?: string; source?: string; paid?: boolean });
+  | ({ kind: 'hotel' } & Common & { city?: string; address?: string; checkIn?: string; checkInTime?: string; checkOut?: string; checkOutTime?: string; source?: string; paid?: boolean; freeCancelUntil?: string });
 
 interface Common { name?: string; total?: number; currency?: string; paidDate?: string; bookingRef?: string; confidence: number }
 
@@ -35,10 +35,10 @@ Rules:
 - name: airline (e.g. "China Eastern"), rental company (e.g. "Hertz"), or hotel name.
 - Flights: one leg per flight segment in order. label is "Departure" for the first outbound flight, "Return" for the first flight home, "Connection" for others. from/to are IATA codes if shown, else city names.
 - Car: pickup/dropoff dates, times and locations.
-- Hotel: city, address, check-in/check-out dates and times, source = booking site if shown (e.g. Booking.com). paid = true if the confirmation says it is prepaid / already charged, false if you pay at the property or it is only reserved with a card guarantee; omit if unclear.
+- Hotel: city, address, check-in/check-out dates and times, source = booking site if shown (e.g. Booking.com). paid = true if the confirmation says it is prepaid / already charged, false if you pay at the property or it is only reserved with a card guarantee; omit if unclear. freeCancelUntil = the last date it can be cancelled free (YYYY-MM-DD), if stated.
 - confidence 0-1 per booking.
 Respond with ONLY JSON in plain text (no citation tags, no HTML), no markdown:
-{"bookings":[{"kind":"flight","name":"","total":0,"currency":"","paidDate":"","bookingRef":"","legs":[{"label":"","from":"","to":"","flightNo":"","departDate":"","departTime":"","arriveDate":"","arriveTime":""}],"confidence":0},{"kind":"car","name":"","total":0,"currency":"","bookingRef":"","pickupDate":"","pickupTime":"","pickupPlace":"","dropoffDate":"","dropoffTime":"","dropoffPlace":"","confidence":0},{"kind":"hotel","name":"","total":0,"currency":"","bookingRef":"","city":"","address":"","checkIn":"","checkInTime":"","checkOut":"","checkOutTime":"","source":"","paid":false,"confidence":0}]}
+{"bookings":[{"kind":"flight","name":"","total":0,"currency":"","paidDate":"","bookingRef":"","legs":[{"label":"","from":"","to":"","flightNo":"","departDate":"","departTime":"","arriveDate":"","arriveTime":""}],"confidence":0},{"kind":"car","name":"","total":0,"currency":"","bookingRef":"","pickupDate":"","pickupTime":"","pickupPlace":"","dropoffDate":"","dropoffTime":"","dropoffPlace":"","confidence":0},{"kind":"hotel","name":"","total":0,"currency":"","bookingRef":"","city":"","address":"","checkIn":"","checkInTime":"","checkOut":"","checkOutTime":"","source":"","paid":false,"freeCancelUntil":"","confidence":0}]}
 Include only the bookings actually present. If none, return {"bookings":[]}.`;
 
   const res = await fetch('https://api.anthropic.com/v1/messages', {
@@ -63,7 +63,7 @@ function clean(list: Record<string, unknown>[]): ExtractedBooking[] {
     const common = { name: str(b.name), total: num(b.total), currency: str(b.currency)?.toUpperCase(), paidDate: date(b.paidDate), bookingRef: str(b.bookingRef), confidence: typeof b.confidence === 'number' ? b.confidence : 0.6 };
     if (b.kind === 'flight') return { kind: 'flight', ...common, legs: ((b.legs as Record<string, unknown>[]) ?? []).map(l => ({ label: str(l.label), from: str(l.from), to: str(l.to), flightNo: str(l.flightNo), departDate: date(l.departDate), departTime: time(l.departTime), arriveDate: date(l.arriveDate), arriveTime: time(l.arriveTime) })) };
     if (b.kind === 'car') return { kind: 'car', ...common, pickupDate: date(b.pickupDate), pickupTime: time(b.pickupTime), pickupPlace: str(b.pickupPlace), dropoffDate: date(b.dropoffDate), dropoffTime: time(b.dropoffTime), dropoffPlace: str(b.dropoffPlace) };
-    return { kind: 'hotel', ...common, city: str(b.city), address: str(b.address), checkIn: date(b.checkIn), checkInTime: time(b.checkInTime), checkOut: date(b.checkOut), checkOutTime: time(b.checkOutTime), source: str(b.source), paid: typeof b.paid === 'boolean' ? b.paid : undefined };
+    return { kind: 'hotel', ...common, city: str(b.city), address: str(b.address), checkIn: date(b.checkIn), checkInTime: time(b.checkInTime), checkOut: date(b.checkOut), checkOutTime: time(b.checkOutTime), source: str(b.source), paid: typeof b.paid === 'boolean' ? b.paid : undefined, freeCancelUntil: date(b.freeCancelUntil) };
   }) as ExtractedBooking[];
 }
 

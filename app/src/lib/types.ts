@@ -94,8 +94,14 @@ export interface Accommodation {
   checkInTime?: string; checkOutTime?: string; address?: string; bookingRef?: string;
   /** false = booked but not charged yet (pay at the hotel). Older stays without the field count as paid. */
   paid?: boolean;
+  /** Last day the booking can be cancelled free (YYYY-MM-DD). Rebooking cheaper only works until then. */
+  freeCancelUntil?: string;
+  /** Prices seen later for the same room and dates, to spot a drop. */
+  priceChecks?: PriceCheck[];
   createdAt: number;
 }
+
+export interface PriceCheck { id: string; at: number; total: number; currency: string; site: string }
 
 /** AI suggestions for one city on a trip. Stored so they're readable offline. */
 export interface IdeaItem {

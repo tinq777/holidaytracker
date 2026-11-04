@@ -62,7 +62,7 @@ function toItem(b: ExtractedBooking, h: Holiday): Item {
   if (b.kind === 'hotel') {
     const checkIn = b.checkIn ?? h.start;
     const checkOut = b.checkOut && b.checkOut > checkIn ? b.checkOut : new Date(Date.parse(checkIn) + 86400000).toISOString().slice(0, 10);
-    return { kind: 'stay', a: { id: uid(), holidayId: h.id, hotel: b.name ?? '', city: b.city ?? '', address: b.address, checkIn, checkInTime: b.checkInTime, checkOut, checkOutTime: b.checkOutTime, total: b.total ?? 0, currency: cur, source: b.source, bookingRef: b.bookingRef, layover: false, paid: b.paid ?? false, createdAt: Date.now() } };
+    return { kind: 'stay', a: { id: uid(), holidayId: h.id, hotel: b.name ?? '', city: b.city ?? '', address: b.address, checkIn, checkInTime: b.checkInTime, checkOut, checkOutTime: b.checkOutTime, total: b.total ?? 0, currency: cur, source: b.source, bookingRef: b.bookingRef, layover: false, paid: b.paid ?? false, freeCancelUntil: b.freeCancelUntil, createdAt: Date.now() } };
   }
   const base = { ...newDraft(h), source: 'booking' as const, merchant: b.name ?? '', amount: b.total ?? 0, currency: cur, bookingRef: b.bookingRef, confidence: b.confidence };
   if (b.kind === 'car') return { kind: 'expense', e: { ...base, category: 'Car hire', date: b.pickupDate ?? h.start, endDate: b.dropoffDate, pickupTime: b.pickupTime, pickupPlace: b.pickupPlace, dropoffTime: b.dropoffTime, dropoffPlace: b.dropoffPlace } };
