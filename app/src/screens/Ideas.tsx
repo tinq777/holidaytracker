@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { useLiveQuery } from 'dexie-react-hooks';
 import { db } from '../lib/db';
 import { fmtRange } from '../lib/dates';
-import { cityRange } from '../lib/cityDates';
+import { cityRange, tripStops } from '../lib/cityDates';
 import { suggestIdeas, mergeStarred, IdeasUnavailable } from '../ai/ideas';
 import { AIError } from '../ai/claude';
 import { useOnline, useUI } from '../components/ui';
@@ -18,10 +18,16 @@ export function useCities(h: Holiday) {
   const names = [...h.destinations];
   for (const a of stays) if (!a.layover && a.city && !names.some(n => norm(n) === norm(a.city))) names.push(a.city);
   for (const l of h.legs ?? []) if (l.city.trim() && !names.some(n => norm(n) === norm(l.city))) names.push(l.city.trim());
-  return names.map(city => {
+  const stops = tripStops(h, stays);
+  const hotelsOf = (mine: typeof stays): HotelRef[] => [...new Map(mine.map(a => [a.id, a])).values()].filter(a => a.hotel).sort((a, b) => a.checkIn.localeCompare(b.checkIn)).map(a => ({ name: a.hotel, address: a.address, from: a.checkIn, to: a.checkOut }));
+  return names.flatMap(city => {
+    const visits = stops.filter(s => norm(s.city) === norm(city) && s.dated);
+    if (visits.length > 1) {
+      // Same city on more than one leg: one card per visit. Later visits focus on what's on then.
+      return visits.map((v, i) => ({ key: i ? `${city}#${i + 1}` : city, city, visit: i + 1, from: v.from, to: v.to, fromStays: true, hotels: hotelsOf(v.mine), ranges: [{ from: v.from, to: v.to }] }));
+    }
     const { from, to, dated, mine, ranges } = cityRange(h, stays, city);
-    const hotels: HotelRef[] = [...new Map(mine.map(a => [a.id, a])).values()].filter(a => a.hotel).sort((a, b) => a.checkIn.localeCompare(b.checkIn)).map(a => ({ name: a.hotel, address: a.address, from: a.checkIn, to: a.checkOut }));
-    return { city, from, to, fromStays: dated, hotels, ranges };
+    return [{ key: city, city, visit: 1, from, to, fromStays: dated, hotels: hotelsOf(mine), ranges }];
   }).sort((a, b) => a.from.localeCompare(b.from));
 }
 
@@ -33,11 +39,16 @@ export default function Ideas({ h }: { h: Holiday }) {
     <p className="small muted" style={{ margin: '10px 4px 12px' }}>
       Things to do, what's on, where to shop and where to eat in each city{h.children ? ', picked with the kids in mind' : ''}. Saved on your phone, so you can read them offline.
     </p>
-    {cities.map(c => <CityCard key={c.city} h={h} {...c} ideas={saved.find(s => s.city === c.city)} others={cities.filter(x => x.city !== c.city).map(x => x.city)} />)}
+    {cities.map(c => <CityCard h={h} {...c} key={c.key} ideas={saved.find(s => s.id === `${h.id}|${c.key}`) ?? (c.visit === 1 ? saved.find(s => s.city === c.city && !s.visit) : undefined)}
+      seen={c.visit > 1 ? cityNames(saved.filter(s => s.city === c.city && (s.visit ?? 1) < c.visit)) : []}
+      others={[...new Set(cities.filter(x => x.city !== c.city).map(x => x.city))]} />)}
   </>;
 }
 
-function CityCard({ h, city, from, to, fromStays, hotels, ranges, ideas, others }: { h: Holiday; city: string; from: string; to: string; fromStays: boolean; hotels: HotelRef[]; ranges: { from: string; to: string }[]; ideas?: CityIdeas; others: string[] }) {
+const cityNames = (list: CityIdeas[]) => list.flatMap(x => [...x.see, ...x.events, ...(x.shop ?? []), ...x.breakfast, ...x.lunch, ...x.dinner].map(i => i.name));
+
+function CityCard({ h, city, visit, from, to, fromStays, hotels, ranges, ideas, others, seen }: { h: Holiday; city: string; visit: number; from: string; to: string; fromStays: boolean; hotels: HotelRef[]; ranges: { from: string; to: string }[]; ideas?: CityIdeas; others: string[]; seen: string[] }) {
+  const again = visit > 1;
   const when = ranges.length > 1 ? ranges.map(r => fmtRange(r.from, r.to)).join(' and ') : fmtRange(from, to);
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState('');
@@ -48,7 +59,7 @@ function CityCard({ h, city, from, to, fromStays, hotels, ranges, ideas, others 
   async function run() {
     setErr(''); setBusy(true);
     try {
-      const next = await suggestIdeas({ holidayId: h.id, city, from, to, adults: h.adults, children: h.children, otherCities: others, hotels, dates: ranges.length > 1 ? ranges.map(r => `${r.from} to ${r.to}`).join(' and ') : undefined });
+      const next = await suggestIdeas({ holidayId: h.id, city, from, to, adults: h.adults, children: h.children, otherCities: others, hotels, dates: ranges.length > 1 ? ranges.map(r => `${r.from} to ${r.to}`).join(' and ') : undefined, visit, seen });
       await db.ideas.put(mergeStarred(ideas, next));
       toast(`Ideas for ${city} ready`);
     } catch (e) {
@@ -66,20 +77,22 @@ function CityCard({ h, city, from, to, fromStays, hotels, ranges, ideas, others 
   return <div className="section city-ideas">
     <div className="section-head">
       <button className="city-title" onClick={() => setOpen(!open)} aria-expanded={open}>
-        <h3>{city}</h3><span className="small muted">{when}{!fromStays && ' (whole trip; add legs in Edit trip)'}</span>
+        <h3>{city}{again && <span className="pill low" style={{ marginLeft: 8, verticalAlign: 'middle' }}>Back again</span>}</h3><span className="small muted">{when}{!fromStays && ' (whole trip; add legs in Edit trip)'}</span>
       </button>
       <button className="btn ghost sm" disabled={busy || !online} onClick={run}>{busy ? 'Thinking…' : ideas ? 'Refresh' : '✨ Suggest'}</button>
     </div>
     {err && <div className="notice warn small">{err}</div>}
-    {!ideas && !busy && <div className="card muted small">Tap ✨ Suggest for things to see and do, what's on {when}, boutique shopping, and breakfast, lunch and dinner spots.{!fromStays && ' Add trip legs in Edit trip to get dates for each city.'}</div>}
+    {!ideas && !busy && again && <div className="card muted small">You're back in {city} {when}. Tap ✨ Suggest for what's on then, a few new things you haven't seen yet, and food near {hotels.length ? hotels.map(x => x.name).join(' and ') : 'where you stay'}.</div>}
+    {!ideas && !busy && !again && <div className="card muted small">Tap ✨ Suggest for things to see and do, what's on {when}, boutique shopping, and breakfast, lunch and dinner spots.{!fromStays && ' Add trip legs in Edit trip to get dates for each city.'}</div>}
     {busy && !ideas && <div className="card muted small">Looking up {city}{h.children ? ' with the kids in mind' : ''}… this can take up to a minute.</div>}
     {ideas && open && <>
-      <Group title="See & do" k="see" items={ideas.see} city={city} star={star} remove={remove} />
+      {!again && <Group title="See & do" k="see" items={ideas.see} city={city} star={star} remove={remove} />}
       <Group title={`What's on · ${when}`} k="events" items={ideas.events} city={city} star={star} remove={remove}
         empty={ideas.source === 'ai-search' ? 'Nothing special found for these dates.' : 'No events listed.'}
         caption={ideas.source === 'ai' ? 'Web search was unavailable, so these are events that usually happen at this time of year. Check dates before you go.' : 'Check dates and tickets before you go.'} />
-      <Group title="Shop" k="shop" items={ideas.shop ?? []} city={city} star={star} remove={remove}
-        empty={ideas.shop ? 'No boutique picks this time.' : 'Tap Refresh to add boutique and trendy shopping ideas.'} />
+      {again && <Group title="Something new to do" k="see" items={ideas.see} city={city} star={star} remove={remove} />}
+      {!again && <Group title="Shop" k="shop" items={ideas.shop ?? []} city={city} star={star} remove={remove}
+        empty={ideas.shop ? 'No boutique picks this time.' : 'Tap Refresh to add boutique and trendy shopping ideas.'} />}
       <div className="eat-head">Eat</div>
       {hotelNow && hotelNow !== hotelThen
         ? <div className="notice small">{hotelThen ? 'Your hotel has changed.' : "You've added a hotel."} Tap Refresh for places near {hotels.map(x => x.name).join(' and ')}.</div>

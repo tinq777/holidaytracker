@@ -49,6 +49,7 @@ function Bookings({ h }: { h: Holiday }) {
   const flights = useLiveQuery(() => db.expenses.where('holidayId').equals(h.id).filter(e => e.category === 'Flights').sortBy('date'), [h.id], []);
   const cars = useLiveQuery(() => db.expenses.where('holidayId').equals(h.id).filter(e => e.category === 'Car hire').sortBy('date'), [h.id], []);
   const [edit, setEdit] = useState<Accommodation | null>(null);
+  const [viewId, setViewId] = useState<string | null>(null);
   const clips = useAttachmentCount([...flights.map(e => e.id), ...cars.map(e => e.id), ...stays.map(a => a.id)]);
   const c = h.homeCurrency;
   const costOf = (a: Accommodation) => { const e = linked.find(x => x.accommodationId === a.id); return e ? homeCost(e) : a.homeAmount ?? 0; };
@@ -93,7 +94,7 @@ function Bookings({ h }: { h: Holiday }) {
       </div>}
       {stays.length === 0 ? <div className="card muted small">Add each hotel to see cost per night, and flag layover stays so they stand out in the trip review.</div> :
         <div className="group">{stays.map(a => { const n = nights(a.checkIn, a.checkOut); const cost = costOf(a);
-          return <BookingRow key={a.id} cat="Accommodation" title={<>{a.hotel}{a.layover && <> <span className="pill low">Layover</span></>}</>} clips={clips[a.id]} onClick={() => setEdit(a)}
+          return <BookingRow key={a.id} cat="Accommodation" title={<>{a.hotel}{a.layover && <> <span className="pill low">Layover</span></>}</>} clips={clips[a.id]} onClick={() => setViewId(a.id)}
             price={<Money v={cost} c={c} className="title" />}>
             {a.paid === false && <div style={{ margin: '2px 0' }}><span className="pill unpaid">Not paid yet</span></div>}
             <WatchLine a={a} />
@@ -101,6 +102,7 @@ function Bookings({ h }: { h: Holiday }) {
             <BookingLines lines={stayLines(a)} />{a.bookingRef && <div className="sub">Ref {a.bookingRef}</div>}
           </BookingRow>; })}</div>}
     </div>
+    {viewId && !edit && <StayView h={h} id={viewId} onClose={() => setViewId(null)} onEdit={a => setEdit(a)} />}
     {edit && <StayEditor h={h} a={edit} onClose={() => setEdit(null)} />}
   </>;
 }
@@ -161,6 +163,41 @@ function PriceWatch({ h, a, onChecks }: { h: Holiday; a: Accommodation; onChecks
   </div>;
 }
 
+/** Read-only view of a stay. Edit opens the editor; price watch and files work right here. */
+function StayView({ h, id, onClose, onEdit }: { h: Holiday; id: string; onClose: () => void; onEdit: (a: Accommodation) => void }) {
+  const a = useLiveQuery(() => db.accommodations.get(id), [id]);
+  const linked = useLiveQuery(() => db.expenses.where('accommodationId').equals(id).first(), [id]);
+  const pms = usePaymentMethods();
+  if (!a) return null;
+  const n = nights(a.checkIn, a.checkOut);
+  const pm = pms.find(p => p.id === a.paymentMethodId)?.name;
+  const homeTotal = linked ? homeCost(linked) : a.homeAmount;
+  const row = (label: string, value: ReactNode) => value ? <div className="view-row"><span>{label}</span><b>{value}</b></div> : null;
+  return <Sheet title={a.hotel || 'Stay'} onClose={onClose} action={<button className="btn ghost" onClick={() => onEdit(a)}>Edit</button>}>
+    <div className="card stay-view">
+      <div className="view-head">
+        <div className="small muted">{[a.city, a.source].filter(Boolean).join(' · ')}</div>
+        <div className="view-pills">
+          {a.layover && <span className="pill low">Layover</span>}
+          <span className={'pill ' + (a.paid === false ? 'unpaid' : 'ok')}>{a.paid === false ? 'Not paid yet' : 'Paid'}</span>
+        </div>
+      </div>
+      <BookingLines lines={stayLines(a)} />
+      <div className="view-price">
+        <b className="num">{fmtMoney(a.total, a.currency)}</b> <span className="muted small">for {n} night{n === 1 ? '' : 's'} · {fmtMoney(a.total / n, a.currency)}/night</span>
+        {a.currency !== h.homeCurrency && homeTotal ? <div className="small muted num">≈ {fmtMoney(homeTotal, h.homeCurrency)} ({h.homeCurrency})</div> : null}
+      </div>
+      {row('Free cancellation until', a.freeCancelUntil && fmtDate(a.freeCancelUntil, { day: 'numeric', month: 'short', year: 'numeric' }))}
+      {row('Booking reference', a.bookingRef)}
+      {row('Paid with', pm)}
+      {a.address && <a className="view-row link" href={`https://maps.apple.com/?q=${encodeURIComponent(`${a.address}, ${a.city}`)}`} target="_blank" rel="noopener"><span>Address</span><b>{a.address}</b></a>}
+    </div>
+    {a.total > 0 && <PriceWatch h={h} a={a} onChecks={() => {}} />}
+    <Attachments holidayId={h.id} ownerId={a.id} label="Booking confirmation" />
+    <button className="btn block" onClick={() => onEdit(a)}>Edit stay</button>
+  </Sheet>;
+}
+
 export function StayEditor({ h, a, onClose: close, note }: { h: Holiday; a: Accommodation; onClose: () => void; note?: string }) {
   const onClose = async () => { if (!(await db.accommodations.get(a.id))) await deleteAttachmentsFor(a.id); close(); };
   const [s, setS] = useState(a); const [total, setTotal] = useState(a.total ? String(a.total) : ''); const [home, setHome] = useState(a.homeAmount ? String(a.homeAmount) : '');
@@ -174,7 +211,7 @@ export function StayEditor({ h, a, onClose: close, note }: { h: Holiday; a: Acco
     await saveAccommodation(h, { ...s, hotel: s.hotel.trim(), total: numOr(total) ?? 0, homeAmount: numOr(home) });
     toast('Stay saved'); onClose();
   }
-  return <Sheet title={exists ? 'Stay' : 'Add stay'} onClose={onClose} action={<button className="btn ghost" onClick={save}>Save</button>}>
+  return <Sheet title={exists ? 'Edit stay' : 'Add stay'} onClose={onClose} action={<button className="btn ghost" onClick={save}>Save</button>}>
     {note && <div className="notice soft small">✨ {note}</div>}
     <Field label="Hotel"><input className="input" value={s.hotel} onChange={e => set('hotel', e.target.value)} placeholder="Pullman Guangzhou Airport" autoFocus={!exists} /></Field>
     <Field label="City"><input className="input" value={s.city} onChange={e => set('city', e.target.value)} /></Field>
@@ -203,7 +240,6 @@ export function StayEditor({ h, a, onClose: close, note }: { h: Holiday; a: Acco
     <label className="switch"><span><b>Paid already</b><div className="small muted">{s.paid === false ? 'Not charged yet: counted as "still to pay", not spent' : 'Counted as spent'}</div></span><input type="checkbox" checked={s.paid !== false} onChange={e => set('paid', e.target.checked)} /></label>
     <label className="switch"><span><b>Layover / transit stay</b><div className="small muted">Highlighted in the trip review</div></span><input type="checkbox" checked={s.layover} onChange={e => set('layover', e.target.checked)} /></label>
     {n > 0 && numOr(total) ? <div className="notice info num">{n} night{n > 1 ? 's' : ''} · {fmtMoney((numOr(total) ?? 0) / n, s.currency)} per night</div> : null}
-    {exists && (numOr(total) ?? 0) > 0 && <PriceWatch h={h} a={{ ...exists, ...s, total: numOr(total) ?? 0 }} onChecks={pc => set('priceChecks', pc)} />}
     <Attachments holidayId={h.id} ownerId={a.id} label="Booking confirmation" />
     <button className="btn primary block" onClick={save}>Save stay</button>
     {exists && <><div className="spacer" /><button className="btn danger block" onClick={async () => { if (await confirm({ title: 'Delete this stay?', body: 'Its cost will be removed from the budget too.', ok: 'Delete', danger: true })) { await deleteAccommodation(a.id); onClose(); } }}>Delete stay</button></>}

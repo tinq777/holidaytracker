@@ -330,3 +330,12 @@ table.hotel-cmp td:first-child { min-width: 96px; }
 .price-banner { display: block; width: 100%; text-align: left; border: 0; cursor: pointer; font: inherit; color: var(--ink); margin: 0 0 12px; }
 .price-banner.good { background: var(--good-bg); }
 .price-banner > div + div { margin-top: 4px; }
+/* Stay view */
+.stay-view { margin-bottom: 12px; }
+.view-head { display: flex; justify-content: space-between; align-items: center; gap: 8px; margin-bottom: 6px; }
+.view-pills { display: flex; gap: 6px; flex-wrap: wrap; justify-content: flex-end; }
+.view-price { margin: 10px 0 6px; font-size: 17px; }
+.view-row { display: flex; justify-content: space-between; gap: 12px; padding: 8px 0; border-top: 1px solid var(--line); font-size: 15px; color: inherit; text-decoration: none; }
+.view-row span { color: var(--muted); }
+.view-row b { font-weight: 600; text-align: right; }
+.view-row.link b { color: var(--link); }

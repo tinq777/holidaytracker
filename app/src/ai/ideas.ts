@@ -4,7 +4,7 @@ import { askClaude, extractJSON } from './claude';
 import { uid } from '../lib/db';
 import type { CityIdeas, IdeaItem } from '../lib/types';
 
-export interface IdeasInput { holidayId: string; city: string; country?: string; from: string; to: string; adults: number; children: number; otherCities: string[]; dates?: string; hotels: { name: string; address?: string; from: string; to: string }[] }
+export interface IdeasInput { holidayId: string; city: string; country?: string; from: string; to: string; adults: number; children: number; otherCities: string[]; dates?: string; visit?: number; seen?: string[]; hotels: { name: string; address?: string; from: string; to: string }[] }
 export class IdeasUnavailable extends Error {}
 
 type Section = 'see' | 'events' | 'shop' | 'breakfast' | 'lunch' | 'dinner';
@@ -42,8 +42,26 @@ Respond with ONLY JSON in plain text (no citation tags, no HTML) (no markdown, n
 {"see":[{"name":"","note":"","area":"","kids":true}],"events":[{"name":"","note":"","when":"","area":""}],"shop":[{"name":"","note":"","area":"","tag":"Neighbourhood"}],"breakfast":[{"name":"","note":"","area":"","price":"$|$$|$$$","kids":true,"near":""}],"lunch":[...],"dinner":[...]}
 Keep each note under 18 words. "area" is the neighbourhood or district.`;
 
-  const { text, searched } = await askClaude({ apiKey: s.apiKey!, model: s.model || DEFAULT_MODEL, content: prompt(true), search: true, maxTokens: 8000, maxSearches: 4 });
-  const parsed = extractJSON(text, 'see');
+  const again = (i.visit ?? 1) > 1;
+  const returnPrompt = `You're a well-travelled local friend. A family is coming back to ${i.city} for a second stay on their holiday${i.otherCities.length ? ` (the trip also visits ${i.otherCities.join(', ')})` : ''}.
+
+Dates of this stay: ${i.from} to ${i.to}
+Travellers: ${who}${i.children ? '. Favour things that work with children and say when something is NOT suitable for kids.' : ''}
+${i.hotels.length ? `Staying at: ${i.hotels.map(h => `${h.name}${h.address ? ` (${h.address})` : ''}, ${h.from} to ${h.to}`).join('; ')}` : 'Hotel not booked yet.'}
+${i.seen?.length ? `Already suggested for their first stay (do NOT repeat these): ${i.seen.slice(0, 60).join('; ')}` : ''}
+
+Use web search to find events, festivals, exhibitions, shows, sports, markets or seasonal happenings on during ${i.from} to ${i.to} in ${i.city}. Only include events you found evidence for on those dates.
+
+Return:
+- events: up to 8 things on during these dates (empty list if none). "when" gives the dates or days.
+- see: 4 new things to do they haven't been given yet (day trips, neighbourhoods, experiences).
+- breakfast, lunch, dinner: 2 new places each${i.hotels.length ? `, near ${i.hotels[0].name}; set "near" to the approximate distance` : ''}.
+
+Respond with ONLY JSON in plain text (no citation tags, no HTML, no markdown, no commentary):
+{"events":[{"name":"","note":"","when":"","area":""}],"see":[{"name":"","note":"","area":"","kids":true}],"breakfast":[{"name":"","note":"","area":"","price":"$|$$|$$$","kids":true,"near":""}],"lunch":[...],"dinner":[...]}
+Keep each note under 18 words. "area" is the neighbourhood or district.`;
+  const { text, searched } = await askClaude({ apiKey: s.apiKey!, model: s.model || DEFAULT_MODEL, content: again ? returnPrompt : prompt(true), search: true, maxTokens: 8000, maxSearches: 4 });
+  const parsed = extractJSON(text, again ? 'events' : 'see');
   return build(i, parsed, searched ? 'ai-search' : 'ai');
 }
 
@@ -54,7 +72,8 @@ function build(i: IdeasInput, parsed: Record<string, unknown>, source: CityIdeas
     price: typeof x.price === 'string' && /^\${1,3}$/.test(x.price) ? x.price : undefined,
     kids: typeof x.kids === 'boolean' ? x.kids : undefined, tag: str(x.tag), near: str(x.near)
   }));
-  const out = { id: `${i.holidayId}|${i.city}`, holidayId: i.holidayId, city: i.city, from: i.from, to: i.to, generatedAt: Date.now(), source, hotels: i.hotels.map(h => h.name) } as CityIdeas;
+  const v = i.visit ?? 1;
+  const out = { id: `${i.holidayId}|${i.city}${v > 1 ? `#${v}` : ''}`, ...(v > 1 ? { visit: v } : {}), holidayId: i.holidayId, city: i.city, from: i.from, to: i.to, generatedAt: Date.now(), source, hotels: i.hotels.map(h => h.name) } as CityIdeas;
   for (const k of SECTIONS) (out as unknown as Record<Section, IdeaItem[]>)[k] = items(parsed[k]);
   return out;
 }

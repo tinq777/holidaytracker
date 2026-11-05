@@ -118,6 +118,8 @@ export interface CityIdeas {
   generatedAt: number; source: 'ai' | 'ai-search' | 'demo';
   /** Hotels the eat suggestions were based on (to spot when the booking changes). */
   hotels?: string[];
+  /** 2+ when the trip comes back to this city on a later leg. */
+  visit?: number;
 }
 
 export interface TripLeg { id: string; city: string; from: string; to: string }
