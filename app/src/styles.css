@@ -339,3 +339,6 @@ table.hotel-cmp td:first-child { min-width: 96px; }
 .view-row span { color: var(--muted); }
 .view-row b { font-weight: 600; text-align: right; }
 .view-row.link b { color: var(--link); }
+.card.parking { margin-bottom: 12px; }
+.parking-tips { margin: 8px 0 0; padding-left: 18px; }
+.parking-tips li { margin: 3px 0; }

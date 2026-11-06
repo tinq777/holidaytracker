@@ -17,6 +17,7 @@ import { BookingLines, carLines, defaultLegs, legLines, stayLines } from '../com
 import { deleteAttachmentsFor } from '../lib/attachments';
 import { BookingImport } from '../components/BookingImport';
 import { BookingButtons } from '../components/BookingButtons';
+import { ParkingNearby } from '../components/ParkingNearby';
 import { cancelDaysLeft, latestCheck, saving } from '../lib/priceWatch';
 import Ideas from './Ideas';
 
@@ -192,6 +193,7 @@ function StayView({ h, id, onClose, onEdit }: { h: Holiday; id: string; onClose:
       {row('Paid with', pm)}
       {a.address && <a className="view-row link" href={`https://maps.apple.com/?q=${encodeURIComponent(`${a.address}, ${a.city}`)}`} target="_blank" rel="noopener"><span>Address</span><b>{a.address}</b></a>}
     </div>
+    <ParkingNearby a={a} />
     {a.total > 0 && <PriceWatch h={h} a={a} onChecks={() => {}} />}
     <Attachments holidayId={h.id} ownerId={a.id} label="Booking confirmation" />
     <button className="btn block" onClick={() => onEdit(a)}>Edit stay</button>

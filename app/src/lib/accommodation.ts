@@ -22,6 +22,7 @@ export async function deleteAccommodation(id: string) {
   await db.attachments.where('ownerId').equals(id).delete();
   await db.expenses.where('accommodationId').equals(id).delete();
   await db.accommodations.delete(id);
+  await db.settings.delete(`parking|${id}`);
 }
 
 export const accommodationHome = (a: Accommodation, linked?: Expense) =>
