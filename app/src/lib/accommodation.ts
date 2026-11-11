@@ -10,7 +10,7 @@ export async function saveAccommodation(h: Holiday, a: Accommodation) {
   let e: Expense = {
     ...(existing ?? { id: uid(), holidayId: h.id, status: 'confirmed', source: 'accommodation', createdAt: Date.now() }),
     merchant: a.hotel, description: `${a.city}${a.city ? ' · ' : ''}${nights(a.checkIn, a.checkOut)} night${nights(a.checkIn, a.checkOut) > 1 ? 's' : ''}${a.layover ? ' (layover)' : ''}`,
-    amount: a.total, currency: a.currency, date: a.checkIn, category: 'Accommodation', accommodationId: a.id, paymentMethodId: a.paymentMethodId, unpaid: a.paid === false ? true : undefined
+    amount: a.total, currency: a.currency, date: a.checkIn, category: 'Accommodation', accommodationId: a.id, paymentMethodId: a.paymentMethodId, unpaid: a.paid === false ? true : undefined, paidShare: a.paid === false && a.deposit && a.total > 0 ? Math.min(1, a.deposit / a.total) : undefined
   } as Expense;
   if (a.currency === h.homeCurrency) e = { ...e, estHome: a.total, rate: 1, rateSource: 'same' };
   else if (a.homeAmount) e = { ...e, estHome: a.homeAmount, rate: a.homeAmount / a.total, rateSource: 'manual' };

@@ -90,6 +90,8 @@ t('unpaid hotels are committed, not spent', () => {
   const s = tripStats(h, [e('f', 'Flights', 600), e('hotel', 'Accommodation', 900, true), e('food', 'Food', 100)], '2026-11-01');
   assert.equal(s.spent, 700); assert.equal(s.toPay, 900); assert.equal(s.committed, 1600); assert.equal(s.remaining, 2400);
   assert.equal(s.dailyBudget, round2((4000 - 1500) / 4));
+  const dep = tripStats(h, [{ ...e('hotel', 'Accommodation', 900, true), paidShare: 0.2 }], '2026-11-01');
+  assert.equal(dep.spent, 180); assert.equal(dep.toPay, 720); assert.equal(dep.committed, 900);
 });
 t('AI citation tags are stripped', () => {
   assert.equal(cleanText('<cite index="21-4,21-5">Fantastic location, close to metro</cite>'), 'Fantastic location, close to metro');

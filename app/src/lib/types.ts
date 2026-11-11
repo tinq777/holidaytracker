@@ -74,6 +74,8 @@ export interface Expense {
   bookingRef?: string;
   /** Booked but not charged yet (mirrors an unpaid stay). Counts as committed, not spent. */
   unpaid?: boolean;
+  /** Part already paid when `unpaid` (a deposit), 0..1. That share counts as spent, the rest as still to pay. */
+  paidShare?: number;
   statementTxnId?: string;
   createdAt: number;
 }
@@ -94,6 +96,10 @@ export interface Accommodation {
   checkInTime?: string; checkOutTime?: string; address?: string; bookingRef?: string;
   /** false = booked but not charged yet (pay at the hotel). Older stays without the field count as paid. */
   paid?: boolean;
+  /** Deposit already paid (stay currency) while the rest is still owed; only used when paid is false. */
+  deposit?: number;
+  /** When the balance is due (optional). */
+  balanceDue?: string;
   /** Last day the booking can be cancelled free (YYYY-MM-DD). Rebooking cheaper only works until then. */
   freeCancelUntil?: string;
   /** Prices seen later for the same room and dates, to spot a drop. */

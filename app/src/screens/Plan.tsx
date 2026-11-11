@@ -58,7 +58,7 @@ function Bookings({ h }: { h: Holiday }) {
   const totalCost = stays.reduce((t, a) => t + costOf(a), 0);
   const layovers = stays.filter(a => a.layover);
   const layoverCost = layovers.reduce((t, a) => t + costOf(a), 0);
-  const unpaidCost = stays.filter(a => a.paid === false).reduce((t, a) => t + costOf(a), 0);
+  const unpaidCost = stays.filter(a => a.paid === false).reduce((t, a) => t + costOf(a) * (1 - depositShare(a)), 0);
   const blank = (): Accommodation => ({ id: uid(), holidayId: h.id, hotel: '', city: '', checkIn: h.start, checkOut: h.start > h.end ? h.start : nextDay(h.start), total: 0, currency: h.currencies[0] ?? c, layover: false, paid: false, createdAt: Date.now() });
 
   return <>
@@ -97,7 +97,7 @@ function Bookings({ h }: { h: Holiday }) {
         <div className="group">{stays.map(a => { const n = nights(a.checkIn, a.checkOut); const cost = costOf(a);
           return <BookingRow key={a.id} cat="Accommodation" title={<>{a.hotel}{a.layover && <> <span className="pill low">Layover</span></>}</>} clips={clips[a.id]} onClick={() => setViewId(a.id)}
             price={<Money v={cost} c={c} className="title" />}>
-            {a.paid === false && <div style={{ margin: '2px 0' }}><span className="pill unpaid">Not paid yet</span></div>}
+            {a.paid === false && <div style={{ margin: '2px 0' }}><span className="pill unpaid">{payLabel(a)}</span></div>}
             <WatchLine a={a} />
             <div className="sub">{a.city ? a.city + ' · ' : ''}<span className="num">{n} night{n > 1 ? 's' : ''} · {fmtMoney(cost / n, c)}/night</span></div>
             <BookingLines lines={stayLines(a)} />{a.bookingRef && <div className="sub">Ref {a.bookingRef}</div>}
@@ -164,6 +164,9 @@ function PriceWatch({ h, a, onChecks }: { h: Holiday; a: Accommodation; onChecks
   </div>;
 }
 
+const depositShare = (a: Accommodation) => (a.paid === false && a.deposit && a.total > 0 ? Math.min(1, a.deposit / a.total) : 0);
+const payLabel = (a: Accommodation) => (depositShare(a) > 0 ? `Deposit paid · ${fmtMoney(a.total - a.deposit!, a.currency)} to pay` : 'Not paid yet');
+
 /** Read-only view of a stay. Edit opens the editor; price watch and files work right here. */
 function StayView({ h, id, onClose, onEdit }: { h: Holiday; id: string; onClose: () => void; onEdit: (a: Accommodation) => void }) {
   const a = useLiveQuery(() => db.accommodations.get(id), [id]);
@@ -180,7 +183,7 @@ function StayView({ h, id, onClose, onEdit }: { h: Holiday; id: string; onClose:
         <div className="small muted">{[a.city, a.source].filter(Boolean).join(' · ')}</div>
         <div className="view-pills">
           {a.layover && <span className="pill low">Layover</span>}
-          <span className={'pill ' + (a.paid === false ? 'unpaid' : 'ok')}>{a.paid === false ? 'Not paid yet' : 'Paid'}</span>
+          <span className={'pill ' + (a.paid === false ? 'unpaid' : 'ok')}>{a.paid === false ? payLabel(a) : 'Paid'}</span>
         </div>
       </div>
       <BookingLines lines={stayLines(a)} />
@@ -188,6 +191,8 @@ function StayView({ h, id, onClose, onEdit }: { h: Holiday; id: string; onClose:
         <b className="num">{fmtMoney(a.total, a.currency)}</b> <span className="muted small">for {n} night{n === 1 ? '' : 's'} · {fmtMoney(a.total / n, a.currency)}/night</span>
         {a.currency !== h.homeCurrency && homeTotal ? <div className="small muted num">≈ {fmtMoney(homeTotal, h.homeCurrency)} ({h.homeCurrency})</div> : null}
       </div>
+      {a.paid === false && (a.deposit ?? 0) > 0 && row('Deposit paid', fmtMoney(a.deposit!, a.currency))}
+      {a.paid === false && row('Still to pay', <>{fmtMoney(Math.max(0, a.total - (a.deposit ?? 0)), a.currency)}{a.balanceDue ? <span className="muted"> by {fmtDate(a.balanceDue, { day: 'numeric', month: 'short' })}</span> : null}</>)}
       {row('Free cancellation until', a.freeCancelUntil && fmtDate(a.freeCancelUntil, { day: 'numeric', month: 'short', year: 'numeric' }))}
       {row('Booking reference', a.bookingRef)}
       {row('Paid with', pm)}
@@ -203,6 +208,8 @@ function StayView({ h, id, onClose, onEdit }: { h: Holiday; id: string; onClose:
 export function StayEditor({ h, a, onClose: close, note }: { h: Holiday; a: Accommodation; onClose: () => void; note?: string }) {
   const onClose = async () => { if (!(await db.accommodations.get(a.id))) await deleteAttachmentsFor(a.id); close(); };
   const [s, setS] = useState(a); const [total, setTotal] = useState(a.total ? String(a.total) : ''); const [home, setHome] = useState(a.homeAmount ? String(a.homeAmount) : '');
+  const [deposit, setDeposit] = useState(a.deposit ? String(a.deposit) : '');
+  const [payMode, setPay] = useState<'full' | 'deposit' | 'none'>(a.paid !== false ? 'full' : a.deposit ? 'deposit' : 'none');
   const pms = usePaymentMethods(); const { toast, confirm } = useUI();
   const exists = useLiveQuery(() => db.accommodations.get(a.id), [a.id]);
   const set = <K extends keyof Accommodation>(k: K, v: Accommodation[K]) => setS(p => ({ ...p, [k]: v }));
@@ -210,7 +217,10 @@ export function StayEditor({ h, a, onClose: close, note }: { h: Holiday; a: Acco
   async function save() {
     if (!s.hotel.trim()) return toast('Add the hotel name');
     if (!n) return toast('Check-out must be after check-in');
-    await saveAccommodation(h, { ...s, hotel: s.hotel.trim(), total: numOr(total) ?? 0, homeAmount: numOr(home) });
+    const dep = payMode === 'deposit' ? numOr(deposit) : undefined;
+    if (payMode === 'deposit' && !dep) return toast('Enter the deposit amount');
+    if (dep && dep > (numOr(total) ?? 0)) return toast("Deposit can't be more than the total");
+    await saveAccommodation(h, { ...s, hotel: s.hotel.trim(), total: numOr(total) ?? 0, homeAmount: numOr(home), paid: payMode === 'full', deposit: dep, balanceDue: payMode === 'deposit' ? s.balanceDue : undefined });
     toast('Stay saved'); onClose();
   }
   return <Sheet title={exists ? 'Edit stay' : 'Add stay'} onClose={onClose} action={<button className="btn ghost" onClick={save}>Save</button>}>
@@ -239,7 +249,17 @@ export function StayEditor({ h, a, onClose: close, note }: { h: Holiday; a: Acco
     </div>
     <Field label="Free cancellation until" hint="Optional. The app reminds you to recheck prices before this date, while you can still cancel and rebook."><input className="input" type="date" value={s.freeCancelUntil ?? ''} max={s.checkIn} onChange={e => set('freeCancelUntil', e.target.value || undefined)} /></Field>
     <Field label="Paid with"><select className="input" value={s.paymentMethodId ?? ''} onChange={e => set('paymentMethodId', e.target.value || undefined)}><option value="">—</option>{pms.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}</select></Field>
-    <label className="switch"><span><b>Paid already</b><div className="small muted">{s.paid === false ? 'Not charged yet: counted as "still to pay", not spent' : 'Counted as spent'}</div></span><input type="checkbox" checked={s.paid !== false} onChange={e => set('paid', e.target.checked)} /></label>
+    <div className="section-label">Payment</div>
+    <div className="seg pay-seg">
+      {(['full', 'deposit', 'none'] as const).map(k => <button key={k} type="button" className={payMode === k ? 'on' : ''} onClick={() => setPay(k)}>{k === 'full' ? 'Paid in full' : k === 'deposit' ? 'Deposit paid' : 'Not paid yet'}</button>)}
+    </div>
+    {payMode === 'deposit' && <div className="inline">
+      <Field label={`Deposit paid (${s.currency})`}><input className="input num" inputMode="decimal" value={deposit} placeholder="0" onChange={e => setDeposit(e.target.value)} /></Field>
+      <Field label="Balance due"><input className="input" type="date" value={s.balanceDue ?? ''} max={s.checkOut} onChange={e => set('balanceDue', e.target.value || undefined)} /></Field>
+    </div>}
+    <p className="small muted" style={{ margin: '4px 4px 12px' }}>{payMode === 'full' ? 'Counted as spent.' : payMode === 'deposit'
+      ? (numOr(deposit) && numOr(total) ? `${fmtMoney(numOr(deposit)!, s.currency)} counted as spent, ${fmtMoney(Math.max(0, (numOr(total) ?? 0) - (numOr(deposit) ?? 0)), s.currency)} as still to pay.` : 'Enter the deposit; the rest is counted as still to pay.')
+      : 'Not charged yet: counted as "still to pay", not spent.'}</p>
     <label className="switch"><span><b>Layover / transit stay</b><div className="small muted">Highlighted in the trip review</div></span><input type="checkbox" checked={s.layover} onChange={e => set('layover', e.target.checked)} /></label>
     {n > 0 && numOr(total) ? <div className="notice info num">{n} night{n > 1 ? 's' : ''} · {fmtMoney((numOr(total) ?? 0) / n, s.currency)} per night</div> : null}
     <Attachments holidayId={h.id} ownerId={a.id} label="Booking confirmation" />

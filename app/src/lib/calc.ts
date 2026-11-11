@@ -55,7 +55,7 @@ export function tripStats(h: Holiday, confirmed: Expense[], today = todayISO()):
     const c = homeCost(e);
     if (e.estHome === undefined && e.actualHome === undefined) unconverted++;
     if (e.actualHome === undefined && e.currency !== h.homeCurrency) estimated += c;
-    if (e.unpaid) toPay += c; else spent += c;
+    if (e.unpaid) { const part = c * (e.paidShare ?? 0); spent += part; toPay += c - part; } else spent += c;
     byCategory[e.category] = (byCategory[e.category] ?? 0) + c;
     if (isBooked(e.category)) booked += c;
     else if (e.date >= h.start && e.date <= today) dayToDayInTrip += c;

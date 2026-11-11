@@ -180,7 +180,7 @@ export function ExpenseRow({ e, h, pms, selectable, selected, onSelect }: { e: E
       <div className="sub">
         {waiting ? (navigator.onLine ? 'AI is reading this…' : 'Waiting for connection') : failed ? 'Could not read. Tap to fill in' : [e.category, pm].filter(Boolean).join(' · ')}
         {e.status === 'inbox' && !waiting && (needs ? <> <span className="pill bad">Fill in</span></> : low ? <> <span className="pill low">Check</span></> : null)}
-        {e.status === 'confirmed' && (e.unpaid ? <> <span className="pill unpaid">Not paid yet</span></> : isBooked(e.category) && <> <span className="pill">Booked</span></>)}
+        {e.status === 'confirmed' && (e.unpaid ? <> <span className="pill unpaid">{e.paidShare ? 'Deposit paid' : 'Not paid yet'}</span></> : isBooked(e.category) && <> <span className="pill">Booked</span></>)}
         {e.statementTxnId && <> <span className="pill ok">Card ✓</span></>}
       </div>
     </div>

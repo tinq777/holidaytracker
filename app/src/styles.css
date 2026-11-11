@@ -342,3 +342,5 @@ table.hotel-cmp td:first-child { min-width: 96px; }
 .card.parking { margin-bottom: 12px; }
 .parking-tips { margin: 8px 0 0; padding-left: 18px; }
 .parking-tips li { margin: 3px 0; }
+.seg.pay-seg { margin-bottom: 8px; }
+.seg.pay-seg button { flex: 1; font-size: 14px; }
